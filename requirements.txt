@@ -1,3 +1,4 @@
+#서비스 명: Alpha from Delta
 # Web Framework
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
