@@ -95,7 +95,7 @@ class Company(Base, TimestampMixin):
     # 관계 설정 (Company ↔ Filing 양방향 1:N)
     filings = relationship("Filing", back_populates="company", cascade="all, delete-orphan")
     # 관계 설정 (Company ↔ UserWatchlistSlot 양방향 1:N)
-    watchlist_slots = relationship("UserWatchlistSlot", back_populates="company", cascade="all, delete-orphan")
+    user_watchlist_slots = relationship("UserWatchlistSlot", back_populates="company", cascade="all, delete-orphan")
 
 
 class Filing(Base, TimestampMixin):
@@ -117,12 +117,12 @@ class Filing(Base, TimestampMixin):
     # 양방향 관계 정의
     company = relationship("Company", back_populates="filings")
     finance = relationship("Finance", back_populates="filing", uselist=False, cascade="all, delete-orphan")
-    periodic_analyses = relationship("PeriodicFilingAnalysis", back_populates="filing", cascade="all, delete-orphan")
+    periodic_filing_analyses = relationship("PeriodicFilingAnalysis", back_populates="filing", cascade="all, delete-orphan")
     dcfs = relationship("Dcf", back_populates="filing", cascade="all, delete-orphan")
-    view_histories = relationship("FilingViewHistory", back_populates="filing", cascade="all, delete-orphan")
+    filing_view_histories = relationship("FilingViewHistory", back_populates="filing", cascade="all, delete-orphan")
 
     # 자기 참조 (10-K/A 정정 공시 연결 관계)
-    original_filing = relationship("Filing", remote_side=[id],foreign_keys=[amends_filing_id], backref="amendments")
+    original_filing = relationship("Filing", remote_side=[id],foreign_keys=[amends_filing_id], backref="amendments") #amendments: 수정 사항
 
 
 class PeriodicFilingAnalysis(Base, TimestampMixin):
@@ -137,7 +137,7 @@ class PeriodicFilingAnalysis(Base, TimestampMixin):
 
     # 외래키 및 양방향 관계 설정 (Filing ↔ PeriodicFilingAnalysis)
     filing_id = Column(Integer, ForeignKey("filings.id", on_delete="CASCADE"), nullable=False)
-    filing = relationship("Filing", back_populates="periodic_analyses")
+    filing = relationship("Filing", back_populates="periodic_filing_analyses")
 
 
 class Finance(Base, TimestampMixin):
@@ -176,7 +176,7 @@ class Dcf(Base, TimestampMixin):
 
     # 복합 유니크 제약조건 (한 공시당 지표별 통계 데이터 단 하나만 적재 보장)
     __table_args__ = (
-        UniqueConstraint('filing_id', 'metric_name', name='uq_filing_metric'),
+        UniqueConstraint('filing_id', 'metric_name', name='unique_dcf_metric'),
     )
 
 
@@ -213,9 +213,9 @@ class User(Base, TimestampMixin):
     marketing_and_alerts = Column(Boolean, default=False, nullable=False)
     required_terms_agreed_at = Column(DateTime(timezone=True), nullable=False)
 
-    watchlist_slots = relationship("UserWatchlistSlot", cascade="all, delete-orphan")
-    valuation_scenarios = relationship("UserValuationScenario", cascade="all, delete-orphan")
-    view_histories = relationship("FilingViewHistory", cascade="all, delete-orphan")
+    user_watchlist_slots = relationship("UserWatchlistSlot", cascade="all, delete-orphan")
+    user_valuation_scenarios = relationship("UserValuationScenario", cascade="all, delete-orphan")
+    filing_view_histories = relationship("FilingViewHistory", cascade="all, delete-orphan")
 
 
 class FilingViewHistory(Base):
@@ -229,11 +229,11 @@ class FilingViewHistory(Base):
     filing_id = Column(Integer, ForeignKey("filings.id", on_delete="CASCADE"), nullable=False)
 
     # 방향성 반영: Filing 측면만 양방향 바인딩 지원
-    filing = relationship("Filing", back_populates="view_histories")
+    filing = relationship("Filing", back_populates="filing_view_histories")
 
     # 복합 유니크 키 지정
     __table_args__ = (
-        UniqueConstraint('user_id', 'filing_id', name='uq_user_filing_history'),
+        UniqueConstraint('user_id', 'filing_id', name='unique_user_filing_view_history'),
     )
 
 
@@ -248,12 +248,12 @@ class UserWatchlistSlot(Base, TimestampMixin):
     company_id = Column(Integer, ForeignKey("companies.id", on_delete="CASCADE"), nullable=False)
 
     # 관계 설정 (Company ↔ UserWatchlistSlot 양방향 1:N 바인딩)
-    company = relationship("Company", back_populates="watchlist_slots")
+    company = relationship("Company", back_populates="user_watchlist_slots")
 
     # 비즈니스 제약 사양: 중복 등록 방지 복합 유니크 키 및 인덱스 배치
     __table_args__ = (
-        UniqueConstraint('user_id', 'company_id', name='uq_user_company_slot'),
-        Index('idx_watchlist_user_id', 'user_id')
+        UniqueConstraint('user_id', 'company_id', name='unique_user_company_watchlist_slot'),
+        Index('index_watchlist_user_id', 'user_id')
     )
 
 
@@ -267,3 +267,8 @@ class UserValuationScenario(Base, TimestampMixin):
     # 단방향 외래키 배치 (User -> Scenario 1:N / Company -> Scenario 1:N)
     user_id = Column(Integer, ForeignKey("users.id", on_delete="CASCADE"), nullable=False)
     company_id = Column(Integer, ForeignKey("companies.id", on_delete="CASCADE"), nullable=False)
+
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'company_id', name='unique_user_company_valuation_scenario'),
+    )
