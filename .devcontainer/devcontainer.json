@@ -1,0 +1,17 @@
+{
+  "name": "Alpah from Delta Dev",
+  "dockerComposeFile": [
+    "../docker-compose.dev.yml"
+  ],
+  "service": "web",
+  "workspaceFolder": "/app",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance"
+      ]
+    }
+  },
+  "remoteUser": "root"
+}
