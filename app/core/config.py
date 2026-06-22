@@ -11,8 +11,7 @@ class Settings(BaseSettings):
     # 데이터베이스 URL (Pydantic이 주입받을 때 엄격하게 문자열 검증)
     #DATABASE_URL: str
     
-    # 필수 외부 API Keys (TRD 및 요구사항 기반)
-    FMP_API_KEY: str
+
     #GOOGLE_AI_API_KEY: str  # 6~7단계 Google AI Studio 연동용
 
     # 외부 환경 변수(.env 파일 및 컨테이너 environment) 자동 매핑 설정
