@@ -2,6 +2,9 @@ import sys
 from loguru import logger
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from contextvars import ContextVar
+
+_request_id: ContextVar[str] = ContextVar("request_id", default="-")
 
 class Settings(BaseSettings):
     # API 및 프로젝트 정보 기본값 세팅
@@ -9,8 +12,7 @@ class Settings(BaseSettings):
     #API_V1_STR: str = "/api"
 
     # 데이터베이스 URL (Pydantic이 주입받을 때 엄격하게 문자열 검증)
-    #DATABASE_URL: str
-    
+    DATABASE_URL: str = "postgresql://postgres:postgres_dev123@db:5432/disclosure_dev_db"
 
     #GOOGLE_AI_API_KEY: str  # 6~7단계 Google AI Studio 연동용
 
@@ -21,19 +23,31 @@ class Settings(BaseSettings):
         extra="ignore"  # 컨테이너 내부에 시스템 환경변수가 더 많아도 에러 내지 말고 필요한 것만 파싱
     )
 
-# 전역에서 이 인스턴스를 import하여 싱글톤처럼 재사용합니다.
-settings = Settings()
-
 def setup_global_mdc_logging():
     #앱 전역 MDC 로깅 포맷 설정
     logger.remove()
     log_format = (
-        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-        "<level>{level: <8}</level> | "
-        "[Ticker: {extra[ticker]:-6}] [RequestID: {extra[request_id]:-8}] - "
-        "<level>{message}</level>"
+    "{time:YYYY/MM/DD HH:mm:ss}|"
+    "<level>{level:<8}</level>|"
+    "[Ticker:{extra[ticker]:<5}]|[RequestID:{extra[request_id]:<8}]|[Domain:{extra[domain]:<6}] - "
+    "<level>{message}</level>"
+    )   
+
+    logger.configure(
+        handlers=[
+            {
+                "sink": sys.stdout,
+                "format": log_format,
+                "level": "INFO"
+            }
+        ],
+        patcher=lambda record: (
+            record["extra"].update({"request_id": _request_id.get()}),
+            record["extra"].setdefault("ticker", "-"),
+            record["extra"].setdefault("domain", "SYSTEM")
+        )
     )
 
-    logger.add(sys.stdout, format=log_format, level="INFO")
-    
+# 전역에서 이 인스턴스를 import하여 싱글톤처럼 재사용합니다.
+settings = Settings()
 setup_global_mdc_logging()

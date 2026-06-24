@@ -88,7 +88,7 @@ class Company(Base, TimestampMixin):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     ticker = Column(String(10), nullable=False, unique=True, index=True)
-    cik = Column(String(10), nullable=False, unique=True)
+    cik = Column(String(10), nullable=False, unique=True, index=True)
     sector = Column(String(100), nullable=True)
     industry = Column(String(100), nullable=True)
 
@@ -111,8 +111,8 @@ class Filing(Base, TimestampMixin):
     analysis_status = Column(SQLEnum(AnalysisStatus), default=AnalysisStatus.NOT_ANALYZED, nullable=False)
 
     # 외래키 (Company 및 자기 참조 정정공시 체인)
-    company_id = Column(Integer, ForeignKey("companies.id", on_delete="CASCADE"), nullable=False)
-    amends_filing_id = Column(Integer, ForeignKey("filings.id", on_delete="SET NULL"), nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    amends_filing_id = Column(Integer, ForeignKey("filings.id", ondelete="SET NULL"), nullable=True)
 
     # 양방향 관계 정의
     company = relationship("Company", back_populates="filings")
@@ -136,7 +136,7 @@ class PeriodicFilingAnalysis(Base, TimestampMixin):
     language = Column(SQLEnum(Language), nullable=False)
 
     # 외래키 및 양방향 관계 설정 (Filing ↔ PeriodicFilingAnalysis)
-    filing_id = Column(Integer, ForeignKey("filings.id", on_delete="CASCADE"), nullable=False)
+    filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False)
     filing = relationship("Filing", back_populates="periodic_filing_analyses")
 
 
@@ -154,7 +154,7 @@ class Finance(Base, TimestampMixin):
     raw_finances = Column(JSONB, nullable=True)    
 
     # 외래키 및 양방향 1:1 제약 설정
-    filing_id = Column(Integer, ForeignKey("filings.id", on_delete="CASCADE"), nullable=False, unique=True)
+    filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False, unique=True)
     filing = relationship("Filing", back_populates="finance")
 
 
@@ -171,7 +171,7 @@ class Dcf(Base, TimestampMixin):
     confidence_level = Column(Float, default=0.95, nullable=False)
 
     # 외래키 및 관계 설정
-    filing_id = Column(Integer, ForeignKey("filings.id", on_delete="CASCADE"), nullable=False)
+    filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False)
     filing = relationship("Filing", back_populates="dcfs")
 
     # 복합 유니크 제약조건 (한 공시당 지표별 통계 데이터 단 하나만 적재 보장)
@@ -225,8 +225,8 @@ class FilingViewHistory(Base):
     view_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # 외래키 설정
-    user_id = Column(Integer, ForeignKey("users.id", on_delete="CASCADE"), nullable=False)
-    filing_id = Column(Integer, ForeignKey("filings.id", on_delete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False)
 
     # 방향성 반영: Filing 측면만 양방향 바인딩 지원
     filing = relationship("Filing", back_populates="filing_view_histories")
@@ -244,8 +244,8 @@ class UserWatchlistSlot(Base, TimestampMixin):
     is_alarm_enable = Column(Boolean, default=True, nullable=False)
 
     # 외래키 설정
-    user_id = Column(Integer, ForeignKey("users.id", on_delete="CASCADE"), nullable=False)
-    company_id = Column(Integer, ForeignKey("companies.id", on_delete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
 
     # 관계 설정 (Company ↔ UserWatchlistSlot 양방향 1:N 바인딩)
     company = relationship("Company", back_populates="user_watchlist_slots")
@@ -265,8 +265,8 @@ class UserValuationScenario(Base, TimestampMixin):
     parameters = Column(JSONB, nullable=False)
 
     # 단방향 외래키 배치 (User -> Scenario 1:N / Company -> Scenario 1:N)
-    user_id = Column(Integer, ForeignKey("users.id", on_delete="CASCADE"), nullable=False)
-    company_id = Column(Integer, ForeignKey("companies.id", on_delete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
 
 
     __table_args__ = (

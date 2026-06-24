@@ -9,6 +9,7 @@ services:
     command: [ "sh", "-c", "while true; do sleep 1000; done" ]
     environment:
       - DATABASE_URL=postgresql://postgres:postgres_dev123@db:5432/disclosure_dev_db
+      - EDGAR_IDENTITY=${EDGAR_IDENTITY}
     depends_on:
       - db
 
