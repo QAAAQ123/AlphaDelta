@@ -12,5 +12,6 @@ class FilingCreate(BaseModel):
     quarter: Quarter
     analysis_status: AnalysisStatus = Field(default=AnalysisStatus.NOT_ANALYZED)
     company_id: int
+    amends_filing_id: int | None = None
 
     model_config = ConfigDict(from_attributes=True)

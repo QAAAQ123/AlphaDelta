@@ -42,12 +42,25 @@ def fetch_past_20_quarters_filings():
                 if not filing_data:
                     continue
 
-                original_filings = []
+                original_filings: list[FilingCreate] = []
                 amendment_filings = []
 
                 try:
+
+                    existing_db_filings = db.query(Filing).filter(Filing.company_id == company_id).all()
+                    company_existing_accessions: set[str] = {f.accession_number for f in existing_db_filings}
+
+                    parent_map: dict[tuple[FormType, int, Quarter], int] = {
+                        (f.form_type, f.year, f.quarter): f.id
+                        for f in existing_db_filings if f.amends_filing_id is None
+                    }
+
                     # [1단계] 원본과 수정 공시 분류 및 원본 스키마 생성
                     for filing in filing_data:
+
+                        if filing.accession_number in company_existing_accessions:
+                            continue
+
                         report_date = datetime.strptime(
                             filing.period_of_report, "%Y-%m-%d"
                         )
@@ -81,7 +94,7 @@ def fetch_past_20_quarters_filings():
                                 quarter=mapped_quarter,
                                 filing_date=filing.filing_date,
                                 analysis_status=AnalysisStatus.NOT_ANALYZED,
-                                parent_id=None,
+                                amends_filing_id=None,
                                 company_id=company_id,
                             )
                             original_filings.append(new_filing)
@@ -98,10 +111,9 @@ def fetch_past_20_quarters_filings():
 
                     # [3단계] 생성된 부모 ID들을 딕셔너리에 맵핑 고속화 기법
                     # Key 기준: (공시종류_연도_분기) -> 예: (FormType.REGULAR_10_Q, 2025, Quarter.Q1): DB_ID
-                    parent_map = {
-                        (obj.form_type, obj.year, obj.quarter): obj.id
-                        for obj in db_originals
-                    }
+                    if db_originals:
+                        for obj in db_originals:
+                            parent_map[(obj.form_type, obj.year, obj.quarter)] = obj.id
 
                     # [4단계] 수정 공시들의 parent_id를 매핑하여 Bulk Insert 진행
                     amendment_schemas = []
@@ -140,7 +152,7 @@ def fetch_past_20_quarters_filings():
                             quarter=mapped_quarter,
                             filing_date=filing.filing_date,
                             analysis_status=AnalysisStatus.NOT_ANALYZED,
-                            parent_id=parent_id,  # 💡 발급받은 부모 ID 대입!
+                            amends_filing_id=parent_id,  # 💡 발급받은 부모 ID 대입!
                             company_id=company_id,
                         )
                         amendment_schemas.append(amend_schema)
