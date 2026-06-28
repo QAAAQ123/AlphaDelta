@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from enum import Enum
 from sqlalchemy import (
-    Column, Integer, String, Float, BigInteger, Boolean, 
+    Column, Integer, String, Float, BigInteger, Numeric, Boolean,
     DateTime, ForeignKey, Enum as SQLEnum, UniqueConstraint, Index
 )
 from sqlalchemy.orm import declarative_base, relationship, declared_attr
@@ -147,11 +147,11 @@ class Finance(Base, TimestampMixin):
     ocf = Column(BigInteger, nullable=False)       
     capex = Column(BigInteger, nullable=False)     
     net_borrowing = Column(BigInteger, nullable=False)
-    beta = Column(Float, nullable=True) #yfinace에서 beta return이 null일 가능성 있음  
-    stock_price = Column(Float, nullable=False)    
-    diluted_shares_outstanding = Column(BigInteger, nullable=False)
-    basic_shares_outstanding = Column(BigInteger, nullable=False)
-    raw_finances = Column(JSONB, nullable=True)    
+    beta = Column(Float, nullable=True)
+    stock_price = Column(Numeric(precision=18, scale=2), nullable=True)    
+    diluted_shares_outstanding = Column(BigInteger, nullable=True)
+    basic_shares_outstanding = Column(BigInteger, nullable=True)
+    raw_finances = Column(JSONB, nullable=False)    
 
     # 외래키 및 양방향 1:1 제약 설정
     filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False, unique=True)
