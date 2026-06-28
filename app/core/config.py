@@ -38,7 +38,7 @@ def setup_global_mdc_logging():
             {
                 "sink": sys.stdout,
                 "format": log_format,
-                "level": "INFO"
+                "level": "DEBUG"
             }
         ],
         patcher=lambda record: (
