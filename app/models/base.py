@@ -4,7 +4,7 @@ from sqlalchemy import (
     Column, Integer, String, Float, BigInteger, Numeric, Boolean,
     DateTime, ForeignKey, Enum as SQLEnum, UniqueConstraint, Index
 )
-from sqlalchemy.orm import declarative_base, relationship, declared_attr
+from sqlalchemy.orm import declarative_base, relationship, declared_attr, deferred
 from sqlalchemy.dialects.postgresql import JSONB
 
 Base = declarative_base()
@@ -91,6 +91,7 @@ class Company(Base, TimestampMixin):
     cik = Column(String(10), nullable=False, unique=True, index=True)
     sector = Column(String(100), nullable=True)
     industry = Column(String(100), nullable=True)
+    fiscal_year_end = Column(SQLEnum(Quarter), nullable=False) #회계종료 분기 추가
 
     # 관계 설정 (Company ↔ Filing 양방향 1:N)
     filings = relationship("Filing", back_populates="company", cascade="all, delete-orphan")
@@ -144,6 +145,7 @@ class Finance(Base, TimestampMixin):
     __tablename__ = "finances"
 
     id = Column(Integer, primary_key=True, index=True)
+    revenue = Column(BigInteger, nullable=False)
     ocf = Column(BigInteger, nullable=False)       
     capex = Column(BigInteger, nullable=False)     
     net_borrowing = Column(BigInteger, nullable=False)
@@ -151,7 +153,7 @@ class Finance(Base, TimestampMixin):
     stock_price = Column(Numeric(precision=18, scale=2), nullable=True)    
     diluted_shares_outstanding = Column(BigInteger, nullable=True)
     basic_shares_outstanding = Column(BigInteger, nullable=True)
-    raw_finances = Column(JSONB, nullable=False)    
+    raw_finances = deferred(Column(JSONB, nullable=False))   
 
     # 외래키 및 양방향 1:1 제약 설정
     filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False, unique=True)
