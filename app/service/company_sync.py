@@ -6,9 +6,12 @@ from sqlalchemy.orm import Session
 import os
 import sys
 from app.core import _request_id
-from app.schemas import CompanyCreate, company
+from app.models.base import Filing, FormType, Quarter
+from app.schemas import CompanyCreate
 from app.crud import company as company_crud
-from edgar import Company
+from app.models import Company
+from edgar import Company as edgar_company
+from sqlalchemy import select, exc
 
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -125,6 +128,64 @@ def sync_nasdaq100_index_companies(db: Session):
     finally:
         _request_id.reset(token)
     
+def set_companies_fiscal_year_end(db: Session):
+    """
+    companies에 회계 종료 분기를 추가적으로 저장하는 함수
+    1. campanies 전체 가져오기
+    2. filing에서 company_id가 맞는 기업의 10-K의 Quarter 찾기
+    SELECT c.id AS company_id, f.quater
+    FROM companies c
+    INNER JOIN filing f ON c.id = f.company_id
+    WHERE f.form_type = '10-K'
+    3. company_id에 맞게 quarter 추가(업데이트)
+    """
+
+    token = _request_id.set(str(uuid.uuid4())[:8])
+
+    with logger.contextualize(ticker="NASDAQ INDEX",domain="Company"):
+        logger.debug("기업 회계 종료 분기 저장 시작")
+        
+        try:
+            companies = db.scalars(select(Company)).all()
+
+            stmt = (
+                select(Company.id.label("company_id"), Filing.quarter)
+                .join(Filing, Company.id == Filing.company_id)
+                .where(Filing.form_type == FormType.REGULAR_10_K.value)
+            )
+            result = db.execute(stmt).all()
+
+            filing_map = {row.company_id: row.quarter for row in result}
+
+            updated_count = 0
+            for company in companies:
+                if company.id in filing_map:
+                    company.fiscal_year_end = filing_map[company.id]
+                    updated_count += 1
+                
+            if updated_count > 0:
+                db.commit()
+                logger.info(f"총 {updated_count}개 기업의 분기(Quarter) 정보 추가 완료")
+            else:
+                logger.warning("업데이트할 일치하는 분기 정보가 없습니다.")
+
+        except exc.SQLAlchemyError as e:
+            db.rollback()  # 에러 발생 시 원래 상태로 되돌림
+            logger.error(f"데이터베이스 업데이트 중 오류 발생: {str(e)}")
+            raise e
+        except Exception as e:
+            db.rollback()
+            logger.error(f"예상치 못한 오류 발생: {str(e)}")
+            raise e
+        finally:
+            _request_id.reset(token)
+            db.close()
+
+
+
+            
+
+
 
 if __name__ == "__main__":
     from sqlalchemy import create_engine
@@ -137,4 +198,5 @@ if __name__ == "__main__":
     SessionLocal = sessionmaker(bind=engine)
     
     with SessionLocal() as db:
-        sync_nasdaq100_index_companies(db)
+        set_companies_fiscal_year_end(db)
+        #sync_nasdaq100_index_companies(db)
