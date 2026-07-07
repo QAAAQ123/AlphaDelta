@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Optional
 from sqlalchemy import (
     Column, Integer, String, Float, BigInteger, Numeric, Boolean,
     DateTime, ForeignKey, Enum as SQLEnum, UniqueConstraint, Index
 )
-from sqlalchemy.orm import declarative_base, relationship, declared_attr, deferred
+from sqlalchemy.orm import Mapped, declarative_base, relationship, declared_attr, deferred
 from sqlalchemy.dialects.postgresql import JSONB
 
 Base = declarative_base()
@@ -144,16 +145,16 @@ class PeriodicFilingAnalysis(Base, TimestampMixin):
 class Finance(Base, TimestampMixin):
     __tablename__ = "finances"
 
-    id = Column(Integer, primary_key=True, index=True)
-    revenue = Column(BigInteger, nullable=False)
-    ocf = Column(BigInteger, nullable=False)       
-    capex = Column(BigInteger, nullable=False)     
-    net_borrowing = Column(BigInteger, nullable=False)
-    beta = Column(Float, nullable=True)
-    stock_price = Column(Numeric(precision=18, scale=2), nullable=True)    
-    diluted_shares_outstanding = Column(BigInteger, nullable=True)
-    basic_shares_outstanding = Column(BigInteger, nullable=True)
-    raw_finances = deferred(Column(JSONB, nullable=False))   
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    revenue: Mapped[int] = Column(BigInteger, nullable=False)
+    ocf: Mapped[int] = Column(BigInteger, nullable=False)       
+    capex: Mapped[int] = Column(BigInteger, nullable=False)     
+    net_borrowing: Mapped[int] = Column(BigInteger, nullable=False)
+    beta: Mapped[Optional[float]] = Column(Float, nullable=True)
+    stock_price: Mapped[Optional[float]] = Column(Numeric(precision=18, scale=2), nullable=True)    
+    diluted_shares_outstanding: Mapped[int] = Column(BigInteger, nullable=True)
+    basic_shares_outstanding: Mapped[int] = Column(BigInteger, nullable=True)
+    raw_finances: Mapped[dict] = deferred(Column(JSONB, nullable=False))   
 
     # 외래키 및 양방향 1:1 제약 설정
     filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False, unique=True)
