@@ -8,10 +8,7 @@ from app.schemas import FilingCreate
 import uuid
 import gc
 import time
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from app.core.config import settings, setup_global_mdc_logging, _request_id
+from app.core.config import _request_id
 from app.core.database import SessionLocal
 from app.crud import company as company_crud
 from app.crud import filing as filing_crud
@@ -212,8 +209,3 @@ def get_past_20_quarters_filings_info(cik: str, ticker: str):
             logger.warning(f"Filing 수집 중 치명적 오류 발생: {e}")
         return []
 
-
-if __name__ == "__main__":
-    setup_global_mdc_logging()
-    settings
-    fetch_past_20_quarters_filings()

@@ -3,23 +3,15 @@ import pandas as pd
 import urllib.request
 from loguru import logger
 from sqlalchemy.orm import Session
-import os
-import sys
 from app.core import _request_id
-from app.models.base import Filing, FormType, Quarter
+from app.models.base import Filing, FormType
 from app.schemas import CompanyCreate
 from app.crud import company as company_crud
 from app.models import Company
-from edgar import Company as edgar_company
 from sqlalchemy import select, exc
 
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-app_root = os.path.abspath(os.path.join(current_dir, "..", ".."))
-if app_root not in sys.path:
-    sys.path.insert(0, app_root)
-
-def get_nasdaq100_index_companies_via_wikipedia() -> list[str]:
+def _fetch_nasdaq100_via_wikipedia() -> bytes:
     try:
         with logger.contextualize(ticker="NASDAQ INDEX",domain="Company"):
             wikipedia_nasdaq_100_url = "https://en.wikipedia.org/wiki/Nasdaq-100"
@@ -29,8 +21,11 @@ def get_nasdaq100_index_companies_via_wikipedia() -> list[str]:
                 wikipedia_nasdaq_100_url, 
                 headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
             )
-            html_content = urllib.request.urlopen(req).read()
-            
+            return urllib.request.urlopen(req).read()
+    except Exception as e:
+        logger.warning(f"위키피티아 크롤링 실패: {e}")
+
+def _extract_and_clean_df(html_content: bytes) -> list[dict]:
             try:
                 tables = pd.read_html(html_content, match="Ticker")
             except ValueError:
@@ -180,23 +175,3 @@ def set_companies_fiscal_year_end(db: Session):
         finally:
             _request_id.reset(token)
             db.close()
-
-
-
-            
-
-
-
-if __name__ == "__main__":
-    from sqlalchemy import create_engine
-    from sqlalchemy.orm import sessionmaker
-    from app.core import settings, setup_global_mdc_logging
-
-    setup_global_mdc_logging()
-    
-    engine = create_engine(settings.DATABASE_URL)
-    SessionLocal = sessionmaker(bind=engine)
-    
-    with SessionLocal() as db:
-        set_companies_fiscal_year_end(db)
-        #sync_nasdaq100_index_companies(db)
