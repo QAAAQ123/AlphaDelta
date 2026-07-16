@@ -1,9 +1,9 @@
 import uuid
-import datetime
 import pandas as pd
 import urllib.request
 from loguru import logger
 from sqlalchemy.orm import Session
+from datetime import datetime
 from app.core import _request_id
 from app.models.base import Filing, Quarter
 from app.schemas import CompanyCreate
@@ -20,7 +20,7 @@ MONTH_TO_QUARTER = [
 
 def _fetch_nasdaq100_via_wikipedia() -> bytes:
     """
-    위키피디아 크롤링으로 나스닥 100 종목을 bytes 형태의 HTML로 반환하는 함수
+    위키피디아 나스닥 100 종목을 크롤링해서 bytes 형태의 HTML로 반환하는 함수
     """
     try:
         with logger.contextualize(ticker="NASDAQ INDEX",domain="Company"):
@@ -116,20 +116,19 @@ def _get_cik_and_fiscal_year_end_via_edgartools(ticker: str) -> dict | None:
             logger.warning("ticker에 해당하는 cik와 fiscal year end 찾기 실패")
             return None
             
-def _save_new_company(db: Session, company_data: CompanyCreate) -> Company:
-    """단일 Company 엔티티를 저장 (책임: 영속성/트랜잭션 관리)"""
+def _create_company_entity(company_data: CompanyCreate) -> Company:
+    return company_crud.create_company(company_data)
+
+def _persist_company(db: Session, company: Company) -> Company:
     try:
-        company = company_crud.create_company(company_data)
         db.add(company)
         db.commit()
         return company
-    except IntegrityError as e:
+    except IntegrityError:
         db.rollback()
-        logger.warning(f"데이터 무결성 에러 발생 (롤백 완료): {e}")
         raise
-    except SQLAlchemyError as e:
+    except SQLAlchemyError:
         db.rollback()
-        logger.error(f"SQLAlchemy 에러 발생 (롤백 완료): {e}")
         raise
 
 def _build_company_create(ticker: str, company_data: dict, cik_fiscal_dict: dict) -> CompanyCreate:
@@ -177,7 +176,8 @@ def sync_nasdaq100_index_companies(db: Session):
                             logger.info(f"이미 DB에 존재하는 CIK: {cik_str}")
                             continue
 
-                        new_company = _build_company_create(ticker,company_data,new_company_cik_fiscal_dict)
-                        _save_new_company(db, new_company)
+                        new_company_entity = _create_company_entity(_build_company_create(ticker,company_data,new_company_cik_fiscal_dict))
+                        _persist_company(new_company_entity)
+                        
     finally:
         _request_id.reset(token)
