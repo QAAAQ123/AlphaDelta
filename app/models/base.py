@@ -152,8 +152,8 @@ class Finance(Base, TimestampMixin):
     net_borrowing: Mapped[int] = Column(BigInteger, nullable=False)
     beta: Mapped[Optional[float]] = Column(Float, nullable=True)
     stock_price: Mapped[Optional[float]] = Column(Numeric(precision=18, scale=2), nullable=True)    
-    diluted_shares_outstanding: Mapped[int] = Column(BigInteger, nullable=True)
-    basic_shares_outstanding: Mapped[int] = Column(BigInteger, nullable=True)
+    diluted_shares_outstanding: Mapped[Optional[int]] = Column(BigInteger, nullable=True)
+    basic_shares_outstanding: Mapped[Optional[int]] = Column(BigInteger, nullable=True)
     raw_finances: Mapped[dict] = deferred(Column(JSONB, nullable=False))   
 
     # 외래키 및 양방향 1:1 제약 설정
