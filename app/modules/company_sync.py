@@ -57,8 +57,10 @@ def sync_nasdaq100_index_companies(db: Session):
                         if cik_str in existing_cik_set:
                             logger.info(f"이미 DB에 존재하는 CIK: {cik_str}")
                             continue
-
-                        new_company_entity = _create_company_entity(_build_company_create(ticker,company_data,new_company_cik_fiscal_dict))
+                        
+                        new_company_dto = _build_company_create(ticker,company_data,new_company_cik_fiscal_dict)
+                        new_company_entity = company_crud.create_company(new_company_dto)
+                            
                         _persist_company(db, new_company_entity)
                         
     finally:
@@ -166,13 +168,6 @@ def _extract_quarter_from_filing(filing: Filing) -> Quarter | None:
         return MONTH_TO_QUARTER[period_date.month - 1]
     except (ValueError, IndexError):
         return None
-
-
-
-            
-def _create_company_entity(company_data: CompanyCreate) -> Company:
-    """company 엔티티를 생성합니다."""
-    return company_crud.create_company(company_data)
 
 def _persist_company(db: Session, company: Company) -> Company:
     """company 테이블에 영속성을 위해 새로운 company 데이터를 저장합니다."""
