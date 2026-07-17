@@ -125,8 +125,11 @@ def _clean_dataframe(dataframe: pd.DataFrame, column_mapping: dict[str,str]) -> 
     refined_df = dataframe[list(column_mapping.values())].copy()
     refined_df.columns = list(column_mapping.keys())
 
+    refined_df = refined_df.fillna("")
+
     for col in refined_df.columns:
         refined_df[col] = refined_df[col].astype(str).str.strip()
+
 
     return refined_df
 
