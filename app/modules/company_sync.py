@@ -3,15 +3,25 @@ import pandas as pd
 import urllib.request
 from loguru import logger
 from sqlalchemy.orm import Session
+from datetime import datetime
 from app.core import _request_id
-from app.models.base import Filing, FormType
+from app.models.base import Filing, Quarter
 from app.schemas import CompanyCreate
 from app.crud import company as company_crud
 from app.models import Company
-from sqlalchemy import select, exc
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+MONTH_TO_QUARTER = [
+    Quarter.Q1, Quarter.Q1, Quarter.Q1,  # 1, 2, 3월
+    Quarter.Q2, Quarter.Q2, Quarter.Q2,  # 4, 5, 6월
+    Quarter.Q3, Quarter.Q3, Quarter.Q3,  # 7, 8, 9월
+    Quarter.Q4, Quarter.Q4, Quarter.Q4   # 10, 11, 12월
+]
 
 def _fetch_nasdaq100_via_wikipedia() -> bytes:
+    """
+    위키피디아 나스닥 100 종목을 크롤링해서 bytes 형태의 HTML로 반환하는 함수
+    """
     try:
         with logger.contextualize(ticker="NASDAQ INDEX",domain="Company"):
             wikipedia_nasdaq_100_url = "https://en.wikipedia.org/wiki/Nasdaq-100"
@@ -26,11 +36,14 @@ def _fetch_nasdaq100_via_wikipedia() -> bytes:
         logger.warning(f"위키피티아 크롤링 실패: {e}")
 
 def _extract_and_clean_df(html_content: bytes) -> list[dict]:
-            try:
-                tables = pd.read_html(html_content, match="Ticker")
-            except ValueError:
-                tables = pd.read_html(html_content, match="Symbol")
-                
+        """
+        크롤링으로 받아온 나스닥 100 html을 
+        ['ticker', 'company', 'industry', 'subsector'] 
+        dict 형태로 정리해주는 함수
+        """
+        try:
+            tables = pd.read_html(html_content, match="Ticker")
+
             if not tables:
                 raise ValueError("위키백과에서 구성 종목 테이블을 필터링 실패")
             
@@ -59,20 +72,75 @@ def _extract_and_clean_df(html_content: bytes) -> list[dict]:
             # 5. 상용 DB 적재나 API 결과 서빙에 용이하도록 딕셔너리 리스트(JSON 형태)로 변환
             return refined_df.to_dict(orient="records")
                 
-    except Exception as e:
-        logger.error(f"데이터 fetching/parsing 실패: {e}")
-        return []
+        except Exception as e:
+            logger.error(f"데이터 fetching/parsing 실패: {e}")
+            return []
     
-def get_cik_via_edgartools(ticker: str) -> str:
+def _extract_quarter_from_filing(filing: Filing) -> Quarter | None:
+    """공시(Filing) 객체에서 보고 기간을 파싱하여 Quarter Enum을 반환합니다."""
+    period_str = filing.period_of_report
+    if not period_str:
+        return None
+    
+    try:
+        period_date = datetime.strptime(period_str, "%Y-%m-%d")
+        return MONTH_TO_QUARTER[period_date.month - 1]
+    except (ValueError, IndexError):
+        return None
 
+
+def _get_cik_and_fiscal_year_end_via_edgartools(ticker: str) -> dict | None:
+    """edgartools를 통해 기업의 CIK와 회계연도 종료 분기를 수집합니다."""
     with logger.contextualize(ticker=ticker):
         try:
-            cik = Company(ticker).cik
-            return cik
+            company = Company(ticker)
+            
+            # 10-K 공시 조회
+            filings = company.get_filings(form="10-K")
+            if not filings:
+                logger.info("10-K 보고서를 찾을 수 없습니다.")
+                return None
+            
+            # 분기 추출 역할을 다른 함수에 위임 (SRP 준수)
+            quarter_enum = _extract_quarter_from_filing(filings.latest())
+            if not quarter_enum:
+                logger.info("10-K의 period_of_report를 분석할 수 없습니다.")
+                return None
+
+            return {
+                "fiscal_year_end": quarter_enum,
+                "cik": company.cik
+            }
+            
         except ValueError:
-            logger.warning("ticker에 해당하는 cik 찾기 실패")
+            logger.warning("ticker에 해당하는 cik와 fiscal year end 찾기 실패")
             return None
             
+def _create_company_entity(company_data: CompanyCreate) -> Company:
+    return company_crud.create_company(company_data)
+
+def _persist_company(db: Session, company: Company) -> Company:
+    try:
+        db.add(company)
+        db.commit()
+        return company
+    except IntegrityError:
+        db.rollback()
+        raise
+    except SQLAlchemyError:
+        db.rollback()
+        raise
+
+def _build_company_create(ticker: str, company_data: dict, cik_fiscal_dict: dict) -> CompanyCreate:
+    """위키 크롤링 데이터와 edgartools 조회 결과를 조합해 CompanyCreate를 생성합니다."""
+    return CompanyCreate(
+        ticker=ticker,
+        name=company_data["company"],
+        cik=str(cik_fiscal_dict["cik"]),
+        industry=company_data.get("industry", ""),
+        sector=company_data.get("subsector", ""),
+        fiscal_year_end=cik_fiscal_dict["fiscal_year_end"]
+    )
 
 def sync_nasdaq100_index_companies(db: Session):
 
@@ -82,7 +150,7 @@ def sync_nasdaq100_index_companies(db: Session):
         with logger.contextualize(ticker="NASDAQ INDEX"):
             logger.info("나스닥 100 종목 DB 동기화 시작")
 
-            latest_companies = get_nasdaq100_index_companies_via_wikipedia()
+            latest_companies = _extract_and_clean_df(_fetch_nasdaq100_via_wikipedia())
             if not latest_companies:
                 logger.error("동기화 실패: 최신 데이터를 가져오지 못함")
                 return
@@ -95,83 +163,21 @@ def sync_nasdaq100_index_companies(db: Session):
                 ticker = company_data["ticker"]
                 
                 with logger.contextualize(ticker=ticker):
+                    #새로운 종목이 편입되어서 모든 데이터를 새롭게 저장
                     if ticker not in existing_ticker_set:
-                        cik = get_cik_via_edgartools(ticker)  
+                        new_company_cik_fiscal_dict = _get_cik_and_fiscal_year_end_via_edgartools(ticker)  
 
-                        if not cik:
-                            logger.warning(f"SEC EDGAR에서 CIK 조회를 실패하여 건너뜁니다.")
+                        if not new_company_cik_fiscal_dict:
+                            logger.warning(f"Edgartools에서 CIK,회계연도 종료 분기 조회를 실패하여 건너뜁니다.")
                             continue
 
-                        cik_str = str(cik)
+                        cik_str = str(new_company_cik_fiscal_dict["cik"])
                         if cik_str in existing_cik_set:
-                            logger.info(f"이미 DB에 존재하는 CIK: {cik}")
+                            logger.info(f"이미 DB에 존재하는 CIK: {cik_str}")
                             continue
 
-                        new_company = CompanyCreate(
-                            ticker = ticker,
-                            name = company_data["company"],
-                            cik = cik_str,
-                            industry = company_data.get("industry",""),
-                            sector = company_data.get("subsector","")
-                        )
-                        try:
-                            company_crud.create_company(db, new_company)
-                            logger.success(f"새로운 회사 DB 저장 성공")
-                        except Exception as e:
-                            logger.warning(f"새로운 회사를 DB에 저장할 수 없음: {e}")
-                            db.rollback()
+                        new_company_entity = _create_company_entity(_build_company_create(ticker,company_data,new_company_cik_fiscal_dict))
+                        _persist_company(new_company_entity)
+                        
     finally:
         _request_id.reset(token)
-    
-def set_companies_fiscal_year_end(db: Session):
-    """
-    companies에 회계 종료 분기를 추가적으로 저장하는 함수
-    1. campanies 전체 가져오기
-    2. filing에서 company_id가 맞는 기업의 10-K의 Quarter 찾기
-    SELECT c.id AS company_id, f.quater
-    FROM companies c
-    INNER JOIN filing f ON c.id = f.company_id
-    WHERE f.form_type = '10-K'
-    3. company_id에 맞게 quarter 추가(업데이트)
-    """
-
-    token = _request_id.set(str(uuid.uuid4())[:8])
-
-    with logger.contextualize(ticker="NASDAQ INDEX",domain="Company"):
-        logger.debug("기업 회계 종료 분기 저장 시작")
-        
-        try:
-            companies = db.scalars(select(Company)).all()
-
-            stmt = (
-                select(Company.id.label("company_id"), Filing.quarter)
-                .join(Filing, Company.id == Filing.company_id)
-                .where(Filing.form_type == FormType.REGULAR_10_K.value)
-            )
-            result = db.execute(stmt).all()
-
-            filing_map = {row.company_id: row.quarter for row in result}
-
-            updated_count = 0
-            for company in companies:
-                if company.id in filing_map:
-                    company.fiscal_year_end = filing_map[company.id]
-                    updated_count += 1
-                
-            if updated_count > 0:
-                db.commit()
-                logger.info(f"총 {updated_count}개 기업의 분기(Quarter) 정보 추가 완료")
-            else:
-                logger.warning("업데이트할 일치하는 분기 정보가 없습니다.")
-
-        except exc.SQLAlchemyError as e:
-            db.rollback()  # 에러 발생 시 원래 상태로 되돌림
-            logger.error(f"데이터베이스 업데이트 중 오류 발생: {str(e)}")
-            raise e
-        except Exception as e:
-            db.rollback()
-            logger.error(f"예상치 못한 오류 발생: {str(e)}")
-            raise e
-        finally:
-            _request_id.reset(token)
-            db.close()
