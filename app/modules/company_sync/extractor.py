@@ -1,3 +1,4 @@
+import io
 import pandas as pd
 import urllib.request
 from loguru import logger
@@ -28,7 +29,7 @@ def extract_and_clean_df(html_content: bytes) -> list[dict]:
     dict 형태로 정리해주는 함수
     """
     try:
-        tables = pd.read_html(html_content, match="Ticker")
+        tables = pd.read_html(io.BytesIO(html_content), match="Ticker")
         if not tables:
             raise ValueError("위키백과에서 구성 종목 테이블을 필터링 실패")
 
