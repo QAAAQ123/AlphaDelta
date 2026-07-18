@@ -5,7 +5,7 @@ from app.core import _request_id
 from app.crud import company as company_crud
 
 from .extractor import fetch_nasdaq100_via_wikipedia, extract_and_clean_df
-from .edgar import get_cik_and_fiscal_year_end_via_edgartools
+from .edgartools import get_cik_and_fiscal_year_end_via_edgartools
 from .repository import build_company_create, persist_company
 """
 Nasdaq 100 지수 구성 기업을 위키백과에서 크롤링하고
