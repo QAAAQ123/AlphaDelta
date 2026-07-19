@@ -1,9 +1,8 @@
 from loguru import logger
-from app.models import Company
-from loguru import logger
+from edgar import Company
 from datetime import datetime
 from app.models.base import Filing, Quarter
-from app.models import Company
+
 
 MONTH_TO_QUARTER = [
     Quarter.Q1, Quarter.Q1, Quarter.Q1,  # 1, 2, 3월
