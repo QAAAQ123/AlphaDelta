@@ -9,6 +9,10 @@ def get_all_from_company(db: Session) -> list[Company]:
     statement = select(Company)
     return db.execute(statement).scalars().all()
 
+def get_company_by_ticker(db: Session, ticker: str) -> Company | None:
+    statement = select(Company).where(Company.ticker == ticker)
+    return db.execute(statement).scalars().first()
+
 def create_company(company_create: CompanyCreate) -> Company:
     new_company = Company(
             ticker=company_create.ticker,
