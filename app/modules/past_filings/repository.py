@@ -3,22 +3,6 @@ from app.models.base import Filing
 from app.schemas import FilingCreate
 from app.crud import filing as filing_crud
 
-
-def get_existing_filing_accessions(db: Session, company_id: int) -> set[str]:
-    """
-    특정 기업의 기존 공시 accession_number를 조회합니다.
-    
-    Args:
-        db: 데이터베이스 세션
-        company_id: 기업의 DB ID
-        
-    Returns:
-        accession_number 문자열 set
-    """
-    existing_db_filings = db.query(Filing).filter(Filing.company_id == company_id).all()
-    return {f.accession_number for f in existing_db_filings}
-
-
 def get_existing_filings(db: Session, company_id: int) -> list[Filing]:
     """
     특정 기업의 모든 기존 공시를 조회합니다.
