@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Optional
 from sqlalchemy import (
-    Column, Integer, String, Float, BigInteger, Boolean, 
+    Column, Integer, String, Float, BigInteger, Numeric, Boolean,
     DateTime, ForeignKey, Enum as SQLEnum, UniqueConstraint, Index
 )
-from sqlalchemy.orm import declarative_base, relationship, declared_attr
+from sqlalchemy.orm import Mapped, declarative_base, relationship, declared_attr, deferred
 from sqlalchemy.dialects.postgresql import JSONB
 
 Base = declarative_base()
@@ -91,6 +92,7 @@ class Company(Base, TimestampMixin):
     cik = Column(String(10), nullable=False, unique=True, index=True)
     sector = Column(String(100), nullable=True)
     industry = Column(String(100), nullable=True)
+    fiscal_year_end = Column(SQLEnum(Quarter), nullable=False) #회계종료 분기 추가
 
     # 관계 설정 (Company ↔ Filing 양방향 1:N)
     filings = relationship("Filing", back_populates="company", cascade="all, delete-orphan")
@@ -143,15 +145,16 @@ class PeriodicFilingAnalysis(Base, TimestampMixin):
 class Finance(Base, TimestampMixin):
     __tablename__ = "finances"
 
-    id = Column(Integer, primary_key=True, index=True)
-    ocf = Column(BigInteger, nullable=False)       
-    capex = Column(BigInteger, nullable=False)     
-    net_borrowing = Column(BigInteger, nullable=False)
-    beta = Column(Float, nullable=True) #yfinace에서 beta return이 null일 가능성 있음  
-    stock_price = Column(Float, nullable=False)    
-    diluted_shares_outstanding = Column(BigInteger, nullable=False)
-    basic_shares_outstanding = Column(BigInteger, nullable=False)
-    raw_finances = Column(JSONB, nullable=True)    
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    revenue: Mapped[int] = Column(BigInteger, nullable=False)
+    ocf: Mapped[int] = Column(BigInteger, nullable=False)       
+    capex: Mapped[int] = Column(BigInteger, nullable=False)     
+    net_borrowing: Mapped[int] = Column(BigInteger, nullable=False)
+    beta: Mapped[Optional[float]] = Column(Float, nullable=True)
+    stock_price: Mapped[Optional[float]] = Column(Numeric(precision=18, scale=2), nullable=True)    
+    diluted_shares_outstanding: Mapped[Optional[int]] = Column(BigInteger, nullable=True)
+    basic_shares_outstanding: Mapped[Optional[int]] = Column(BigInteger, nullable=True)
+    raw_finances: Mapped[dict] = deferred(Column(JSONB, nullable=False))   
 
     # 외래키 및 양방향 1:1 제약 설정
     filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False, unique=True)
