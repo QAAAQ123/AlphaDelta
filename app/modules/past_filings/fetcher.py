@@ -1,6 +1,5 @@
-from loguru import logger
+from app.core import logger
 from edgar import Company
-import datetime
 
 
 def fetch_past_20_quarters_filings_info(cik: str, ticker: str):
@@ -15,25 +14,27 @@ def fetch_past_20_quarters_filings_info(cik: str, ticker: str):
         과거 20개 분기의 공시 객체 리스트 (수정공시 포함)
         조회 실패 시 빈 리스트 반환
     """
-    with logger.contextualize(domain="Filing", ticker=ticker):
-        try:
-            company = Company(cik)
+    try:
+        company = Company(cik)
 
-            
-            not_amended_filings = company.get_filings(form=["10-K", "10-Q"], amendments=False).head(20)
-            all_amended_filings = company.get_filings(form=["10-K/A", "10-Q/A"])
+        
+        not_amended_filings = company.get_filings(form=["10-K", "10-Q"], amendments=False).head(20)
+        all_amended_filings = company.get_filings(form=["10-K/A", "10-Q/A"])
 
-            target_periods = _extract_periods(not_amended_filings)
-            amended_filings = _filter_amendments_by_period(all_amended_filings, target_periods)
-            processed_data = list(not_amended_filings) + amended_filings
+        target_periods = _extract_periods(not_amended_filings)
+        amended_filings = _filter_amendments_by_period(all_amended_filings, target_periods)
+        processed_data = list(not_amended_filings) + amended_filings
 
-            logger.success(
-                f"최종 수집 완료: 총 {len(processed_data)}개 (원본 {len(not_amended_filings)}개 + 수정공시 {len(amended_filings)}개)"
-            )
-            return processed_data
-        except Exception as e:
-            logger.warning(f"Filing 수집 중 치명적 오류 발생: {e}")
-        return []
+        logger.bind(
+            total_count=len(processed_data),
+            raw_count=len(not_amended_filings),
+            amended_count=len(amended_filings),
+        ).success("최종 수집 완료")
+
+        return processed_data
+    except Exception:
+        logger.exception("Filing 수집 중 치명적 오류 발생")
+    return []
 
 def _extract_periods(filings) -> set[str]:
     """공시 리스트에서 report period 집합을 추출합니다."""
