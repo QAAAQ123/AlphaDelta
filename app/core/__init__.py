@@ -1,4 +1,5 @@
-from app.core.config import Settings,setup_global_mdc_logging,_request_id
+from app.core.config import Settings
+from app.core.logger import logger
 
 settings=Settings()
-__all__=["Settings", "setup_global_mdc_logging", "_request_id"]
+__all__=["Settings", "logger"]
