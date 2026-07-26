@@ -1,10 +1,4 @@
-import sys
-from loguru import logger
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from contextvars import ContextVar
-
-_request_id: ContextVar[str] = ContextVar("request_id", default="-")
 
 class Settings(BaseSettings):
     # API 및 프로젝트 정보 기본값 세팅
@@ -23,31 +17,7 @@ class Settings(BaseSettings):
         extra="ignore"  # 컨테이너 내부에 시스템 환경변수가 더 많아도 에러 내지 말고 필요한 것만 파싱
     )
 
-def setup_global_mdc_logging():
-    #앱 전역 MDC 로깅 포맷 설정
-    logger.remove()
-    log_format = (
-    "{time:YYYY/MM/DD HH:mm:ss}|"
-    "<level>{level:<8}</level>|"
-    "[Ticker:{extra[ticker]:<5}]|[RequestID:{extra[request_id]:<8}]|[Domain:{extra[domain]:<6}] - "
-    "<level>{message}</level>"
-    )   
 
-    logger.configure(
-        handlers=[
-            {
-                "sink": sys.stdout,
-                "format": log_format,
-                "level": "DEBUG"
-            }
-        ],
-        patcher=lambda record: (
-            record["extra"].update({"request_id": _request_id.get()}),
-            record["extra"].setdefault("ticker", "-"),
-            record["extra"].setdefault("domain", "SYSTEM")
-        )
-    )
 
 # 전역에서 이 인스턴스를 import하여 싱글톤처럼 재사용합니다.
 settings = Settings()
-setup_global_mdc_logging()

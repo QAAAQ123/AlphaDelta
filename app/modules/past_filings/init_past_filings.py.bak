@@ -1,7 +1,7 @@
 from datetime import datetime
 import sys
 import os
-from loguru import logger
+from app.core import logger
 from edgar import Company
 from app.models.base import AnalysisStatus, Filing, Quarter, FormType
 from app.schemas import FilingCreate

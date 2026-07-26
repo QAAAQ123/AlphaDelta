@@ -1,8 +1,6 @@
 from datetime import datetime
-from loguru import logger
 from app.models.base import AnalysisStatus, Filing, Quarter, FormType
 from app.schemas import FilingCreate
-from sqlalchemy.orm import Session
 
 
 def classify_and_build_original_filings(

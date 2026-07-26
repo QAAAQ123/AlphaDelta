@@ -1,7 +1,7 @@
 import io
 import pandas as pd
 import urllib.request
-from loguru import logger
+from app.core import logger
 
 
 def fetch_nasdaq100_via_wikipedia() -> bytes | None:
@@ -9,17 +9,16 @@ def fetch_nasdaq100_via_wikipedia() -> bytes | None:
     위키피디아 나스닥 100 종목을 크롤링해서 bytes 형태의 HTML로 반환하는 함수
     """
     try:
-        with logger.contextualize(ticker="NASDAQ INDEX",domain="Company"):
-            wikipedia_nasdaq_100_url = "https://en.wikipedia.org/wiki/Nasdaq-100"
-            logger.info("나스닥 100 지수 구성 기업 위키피디아 크롤링 시작")
-            
-            req = urllib.request.Request(
-                wikipedia_nasdaq_100_url, 
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-            )
-            return urllib.request.urlopen(req).read()
+        wikipedia_nasdaq_100_url = "https://en.wikipedia.org/wiki/Nasdaq-100"
+        logger.info("나스닥 100 지수 구성 기업 위키피디아 크롤링 시작")
+        
+        req = urllib.request.Request(
+            wikipedia_nasdaq_100_url, 
+            headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+        )
+        return urllib.request.urlopen(req).read()
     except Exception as e:
-        logger.warning(f"위키피티아 크롤링 실패 None 리턴: {e}")
+        logger.exception(f"위키피티아 크롤링 실패 None 리턴: {e}")
         return None
 
 def extract_and_clean_df(html_content: bytes) -> list[dict]:
@@ -44,8 +43,8 @@ def extract_and_clean_df(html_content: bytes) -> list[dict]:
         refined_df = _clean_dataframe(target_df, col_mapping)
         return refined_df.to_dict(orient="records")
 
-    except Exception as e:
-        logger.error(f"데이터 fetching/parsing 실패: {e}")
+    except Exception:
+        logger.exception("데이터 fetching/parsing 실패")
         return []
 
 def _find_column_mapping(original_columns: list) -> dict[str,str | None]:
