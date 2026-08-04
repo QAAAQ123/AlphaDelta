@@ -2,13 +2,12 @@ from app.core import logger
 from edgar import Company
 
 
-def fetch_past_20_quarters_filings_info(cik: str, ticker: str):
+def fetch_past_20_quarters_filings_info(cik: str):
     """
     edgartools를 통해 과거 20개 분기 공시 정보를 조회합니다.
     
     Args:
         cik: 기업의 CIK 코드
-        ticker: 기업의 Ticker 심볼
         
     Returns:
         과거 20개 분기의 공시 객체 리스트 (수정공시 포함)

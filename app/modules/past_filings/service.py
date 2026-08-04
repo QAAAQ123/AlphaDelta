@@ -1,5 +1,6 @@
 import gc
 import time
+
 from app.core.database import SessionLocal
 from app.core import logger
 from app.crud import company as company_crud
@@ -80,6 +81,9 @@ def initialize_past_filings(ticker: str):
                     repository.commit_filings(db)
                     total_count = len(original_filings) + len(amendment_schemas)
                     logger.bind(total_count=total_count).success("자기참조 매핑 및 일괄 적재 완료")
+
+                except ValueError:
+                    logger.exception("공시 처리 중 유효하지 않은 입력값으로 인한 실패")
 
                 except Exception:
                     repository.rollback_filings(db)
