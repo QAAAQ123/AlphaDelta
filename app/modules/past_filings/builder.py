@@ -6,7 +6,7 @@ from app.schemas import FilingCreate
 def classify_and_build_original_filings(
     filing_data: list,
     company_id: int,
-    existing_accessions: set[str]
+    existing_accessions: set[str] | None
 ) -> tuple[list[FilingCreate], list]:
     """
     공시 데이터를 원본과 수정공시로 분류하고 원본 FilingCreate 스키마를 생성합니다.
@@ -51,7 +51,7 @@ def classify_and_build_original_filings(
     return original_filings, amendment_filings
 
 def build_amendment_filings(
-    amendment_filings: list,
+    amendment_filings: list | None,
     company_id: int,
     parent_map: dict
 ) -> list[FilingCreate]:
@@ -126,7 +126,7 @@ def _map_form_type(raw_form: str) -> FormType:
             if is_amend
             else FormType.REGULAR_10_K
         )
-    else:
+    elif raw_form in ["10-Q", "10-Q/A"]:
         mapped_form = (
             FormType.AMENDMENT_10_Q_A
             if is_amend
@@ -140,11 +140,13 @@ def _get_parent_form_type(child_form_type: FormType) -> FormType:
         return FormType.REGULAR_10_K
     elif child_form_type == FormType.AMENDMENT_10_Q_A:
         return FormType.REGULAR_10_Q
-    return child_form_type  # 이미 원본인 경우 그대로 반환
+    elif child_form_type == (FormType.REGULAR_10_K, FormType.REGULAR_10_Q):
+        return child_form_type  # 이미 원본인 경우 그대로 반환
+    raise ValueError("지원하지 않는 FormType")
 
 
 def _parse_year_and_quarter(period_of_report: str) -> tuple[int, Quarter]:
-    """보고 기간(YYYY-MM-DD)을 파싱하여 연도와 Quarter Enum을 반환합니다."""
+    """보고 기간(YYYY-mm-dd)을 파싱하여 연도와 Quarter Enum을 반환합니다."""
     report_date = datetime.strptime(period_of_report, "%Y-%m-%d")
     q_num = (report_date.month - 1) // 3 + 1
 
