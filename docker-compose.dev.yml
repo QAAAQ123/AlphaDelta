@@ -1,6 +1,7 @@
 services:
   web:
     build: .
+    image: alphadelta-web:latest
     container_name: fastapi_app_dev
     ports:
       - "8000:8000"
