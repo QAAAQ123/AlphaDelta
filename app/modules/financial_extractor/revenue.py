@@ -6,23 +6,47 @@
 - xbrl.reporting_periods가 3개월이 아니라면 QTD 값을 계산해주는 함수를 만들어야 한다.
 
 get_revenue는 QTD,YTD를 알려주지 않고 가장 days가 적은 값을 반환한다. => revenue의 QTD만 계산해주려면 get_revenue_qtd 함수를 만들어야 한다.
-get_revenue_qtd(filings):
-1. xbrl.reporting_periods로 days/fiscal_period를 확인하여 QTD인지 YTD인지 확인한다.
-2. days <= 130이면 1개분기(90일)-2개분기(180일)의 사이 이므로 QTD이다.
-3. days > 130이면 YTD 값만 있기 때문에 이전 분기의 revenue를 빼서 QTD를 계산해주어야한다.
+get_revenue_qtd(Filings):
+
+
+_determain_period_kind(Filing):
+1. filing에서 xbrl 객체를 추출하고 보고 종료일(period_of_report)을 가져온다.
+2. xbrl.reporting_periods 중 type이 "duration"이고 end_date가 보고 종료일과
+    일치하는 period들을 필터링한다.
+3. 필터링된 period 중 days가 가장 작은 period를 현재 기간으로 선택한다.
+4. days <= QUARTER_MAX_DAYS이면 단일 분기(QTD)로 판단하여 "QTD"를 반환한다.
+5. days <= YTD_6M_MAX_DAYS이면 "YTD6"(반기)판단하여 "YTD6"를 반환한다.
+6. days <= 285 "YTD9"(9개월)판단하여 "YTD9"를 반환한다.
+6. 위 조건에 해당하지 않으면 fiscal_period 값을 그대로 반환하고,
+    fiscal_period가 없으면 "unknown"을 반환한다.
 """
 from edgar import Filing
 
+# edgartools 소스와 동일한 상수
+QUARTER_MAX_DAYS = 120
+YTD_6M_MAX_DAYS = 229
+YTD_9M_MAX_DAYS = 329
 
 def _determine_period_kind(filing:Filing) -> str:
     """
     기간의 종류(QTD,YTD)를 결정한다.
     
-    Args: Filing(Edgartools Filing 타입)
+    Args:
+        filing (Filing): Edgartools Filing 타입
 
-    Returns: str: QTD or YTD
+    Returns:
+        str: 기간 종류
+            - "QTD": days <= QUARTER_MAX_DAYS
+            - "YTD6": days <= YTD_6M_MAX_DAYS
+            - "YTD9": days <= YTD_9M_MAX_DAYS
+            - "unknown" or filing의 period_type값: 위 3경우가 아닐 때
 
-    Raises: ValueError, TypeError
+    Raises:
+        ValueError:
+            - xbrl.period_of_report와 end_date가 일치하는 duration 타입 period가 없는 경우
+            - 해당 period에 'days' 필드가 없는 경우
+        TypeError:
+            - filing이 올바르지 않은 타입인 경우
     """
     xbrl = filing.xbrl()
     doc_end = xbrl.period_of_report
@@ -47,9 +71,11 @@ def _determine_period_kind(filing:Filing) -> str:
             f"filing={filing}, doc_end={doc_end}, period={current}"
         )
 
-    if current["days"] <= 100:
+    if current["days"] <= QUARTER_MAX_DAYS:
         return "QTD"
-    elif current.get("fiscal_period") in ("YTD6", "YTD9"):
-        return "YTD"
+    elif current["days"] <= YTD_6M_MAX_DAYS:
+        return "YTD6"
+    elif current["days"] <= YTD_9M_MAX_DAYS:
+        return "YTD9"
     else:
         return current.get("period_type","unknown")
