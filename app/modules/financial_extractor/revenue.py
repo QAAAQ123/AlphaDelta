@@ -1,3 +1,4 @@
+
 """
 매출(revenue or net income) QTD 계산 모듈
 - 매출은 손익계산서의 항목이여서 단순 getter를 해주면 QTD 값을 얻을 수 있다.
@@ -14,15 +15,41 @@ from edgar import Filing
 
 
 def _determine_period_kind(filing:Filing) -> str:
+    """
+    기간의 종류(QTD,YTD)를 결정한다.
+    
+    Args: Filing(Edgartools Filing 타입)
+
+    Returns: str: QTD or YTD
+
+    Raises: ValueError, TypeError
+    """
     xbrl = filing.xbrl()
     doc_end = xbrl.period_of_report
 
+    
     period_at_end = [
         p for p in xbrl.reporting_periods
         if p["type"] == "duration" and p["end_date"] == doc_end
     ]
 
-    current = min(period_at_end, key=lambda p: p["days"])
+    if not period_at_end:
+        raise ValueError(
+            f"[_determine_period_kind] duration 타입의 reporting period를 찾을 수 없습니다. "
+            f"filing={filing}, doc_end={doc_end}"
+        )
 
-    if current["days"] <= 130:
+    current = min(period_at_end, key=lambda p: p.get("days", None))
+
+    if current["days"] is None:
+        raise ValueError(
+            f"[_determine_period_kind] 'days' 필드가 없는 period입니다. "
+            f"filing={filing}, doc_end={doc_end}, period={current}"
+        )
+
+    if current["days"] <= 100:
         return "QTD"
+    elif current.get("fiscal_period") in ("YTD6", "YTD9"):
+        return "YTD"
+    else:
+        return current.get("period_type","unknown")
