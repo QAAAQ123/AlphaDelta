@@ -1,15 +1,23 @@
 """
 매출 QTD 계산 모듈 테스트
 
+get_revenue_qtd(filing: Filing): 매출의 QTD 값을 리턴하는 getter
+
+_extract_revenue_by_period_kind(filing: Filing, period_kind: str): 기간 종류에 따라 매출의 QTD를 계산하는 함수
+정상1. QTD
+
 _determine_period_kind(filing:Filing): QTD인지 YTD인지 확인하는 함수
-정상1. days <= 130이면: QTD return
-정상2. days > 130이고 fiscal_period가 YTD6,YTD9이면: YTD return
-정상3. 1,2의 경우에 모두 맞지 않으면: period_type return
-예외1. days가 None인 경우: TypeError 발생
-예외2. type = "duration"이 없는 경우: ValueError 발생
+정상1. days <= 120(QUARTER_MAX_DAYS)이면: "QTD" return
+정상2. 120 < days <= 229(YTD_6M_MAX_DAYS)이면: "YTD6" return
+정상3. 229 < days <= 329(YTD_9M_MAX_DAYS)이면: "YTD9" return
+정상4. days > 329이면: period_type 또는 "unknown" return
+예외1. days가 None이 포함된 경우: TypeError 발생
+예외2. type="duration"인 period가 없는 경우: ValueError 발생
+예외3. days가 None 단독인 경우: ValueError 발생
 """
-from app.modules.financial_extractor.revenue import _determine_period_kind
+from app.modules.financial_extractor.revenue import _determine_period_kind, get_revenue_qtd
 from edgar import Filing
+from unittest.mock import patch
 import pytest
 
 @pytest.fixture
@@ -231,7 +239,50 @@ class TestDeterminePeriodKind:
 
         assert result == "unknown"
 
+class TestExtractRevenueByPeriodKind:
+    @patch("app.modules.financial_extractor.revenue._determine_period_kind",return_value = "QTD")
+    def test_extract_revenue_by_period_kind_return_edgartools_get_revenue_when_determine_period_kind_return_QTD(self, mock_determine, create_stub_filing):
+        """기간 기준이 QTD이면 edgartools get_revenue()를 return한다."""
+        #given
+        expected_revenue = 100000
+        stub_filing = create_stub_filing(
+        period_of_report="2023-09-30",
+        reporting_periods=[
+            {"type": "duration", "end_date": "2023-09-30", "days": 92},
+            {"type": "duration", "end_date": "2022-09-30", "days": 92},
+            ]
+        )
+        #filing.obj().financials.get_revenue()
+        stub_filing.obj.return_value.financials.get_revenue.return_value = expected_revenue
 
+        # when
+        result = get_revenue_qtd(stub_filing)
+
+        #then
+        stub_filing.obj.return_value.financials.get_revenue.assert_called_once()
+        assert result == expected_revenue
+
+    @patch("app.modules.financial_extractor.revenue._determine_period_kind",return_value = "YTD6")
+    def test_get_revenue_qtd_return__convert_ytd9_to_quarterly_revenue_when_determine_period_kind_return_YTD6(self, mock_determine, create_stub_filing):
+        """기간 기준이 QTD이면 edgartools get_revenue()를 return한다."""
+        #given
+        expected_revenue = 100000
+        stub_filing = create_stub_filing(
+        period_of_report="2023-09-30",
+        reporting_periods=[
+            {"type": "duration", "end_date": "2023-09-30", "days": 92},
+            {"type": "duration", "end_date": "2022-09-30", "days": 92},
+            ]
+        )
+        #filing.obj().financials.get_revenue()
+        stub_filing.obj.return_value.financials.get_revenue.return_value = expected_revenue
+
+        # when
+        result = get_revenue_qtd(stub_filing)
+
+        #then
+        stub_filing.obj.return_value.financials.get_revenue.assert_called_once()
+        assert result == expected_revenue
 
 
 

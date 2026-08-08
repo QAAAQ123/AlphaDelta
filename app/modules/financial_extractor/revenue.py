@@ -1,4 +1,3 @@
-
 """
 매출(revenue or net income) QTD 계산 모듈
 - 매출은 손익계산서의 항목이여서 단순 getter를 해주면 QTD 값을 얻을 수 있다.
@@ -21,11 +20,38 @@ _determain_period_kind(Filing):
     fiscal_period가 없으면 "unknown"을 반환한다.
 """
 from edgar import Filing
+from app.core import logger
 
 # edgartools 소스와 동일한 상수
 QUARTER_MAX_DAYS = 120
 YTD_6M_MAX_DAYS = 229
 YTD_9M_MAX_DAYS = 329
+
+
+
+def get_revenue_qtd(filing: Filing):
+    """
+    매출의 QTD를 return한다.
+
+    Args:
+    filing (Filing): Edgartools Filing 타입
+
+    Returns:
+    int | float | None: 공시마다 달라짐
+    edgartools 소스코드: return float(value) if '.' in str(value) else int(value)- edgartools/edgar/financials.py 라인 424,250
+    - int: 공시의 반환값이 int인 경우
+    - float: 공시의 반환값에 소수점이 있는 경우
+    - None: 매출 QTD가 없는 경우
+    Raises:
+    """
+    with logger.contextualize(domain = "Finance", job = "매출 QTD 추출", accession_number = filing.accession_no):
+        period_kind = _determine_period_kind(filing)
+        logger.info("매출 QTD 추출 시작", period_kind=period_kind)
+
+        revenue = _extract_revenue_by_period(filing, period_kind)
+        logger.info("매출 추출 완료", revenue=revenue)
+        return revenue
+
 
 def _determine_period_kind(filing:Filing) -> str:
     """
