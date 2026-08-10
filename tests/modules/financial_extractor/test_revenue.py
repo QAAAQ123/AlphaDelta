@@ -4,14 +4,10 @@
 1. get_revenue_qtd(filing)
 정상1. 10-K가 아닌 10-Q 공시가 들어왔을 때 -> revenue return
 정상2. 10-K 공시가 들어왔을 때 -> QTD revenue return
-
-
-
-3. _extract_primary_period_meta
 """
 import pytest
 from edgar import Filing
-from app.modules.financial_extractor.revenue import _get_income_statement
+from app.modules.financial_extractor.revenue import _get_income_statement,_extract_primary_period_meta_data
 
 
 """
@@ -45,7 +41,18 @@ class TestGetIncomeStatment:
         assert result == stub_df
         mock_financials.income_statement.assert_called_once()
 
+"""
+2. _extract_primary_period_meta_data(income_statement):
+책임2-손익계산서 DataFrame를 우선순위대로 정렬하여 가장 최신이고 days가 짧은 meata data 추출
+예외1. 손익계산서가 None이면 None을 return
+"""
+class TestExtractPrimaryPeriodMetaData:
+    def test_extract_primary_period_meta_data_return_none_when_income_statement_is_none():
+        income_statement = None
 
+        result = _extract_primary_period_meta_data(income_statement)
+
+        assert result == None
 
 
 
