@@ -7,16 +7,16 @@
 from typing import Any
 from edgar import Filing
 
-def _get_revenue_qtd_from_10_q(financials: Any) -> int | float | None:
+def _get_revenue_from_edgartools(financials: Any) -> int | float | None:
     """
     10-Q의 매출을 edgartools 단순 get_revenue()로 가져오는 함수
-    Args:
+    ##### Args:
         financials: Filing.obj().financials
-    Returns:
+    ##### Returns:
         revenue:
             회사마다 반환 타입이 다름(int or float)
             예외 발생시 또는 데이터 없을 시 None
-    Raises:
+    ##### Raises:
         Exception: edgartools get_revenue() 호출 중 예상치 못한 에러 발생 시
     """
     if financials is None:
@@ -38,9 +38,38 @@ def _get_revenue_qtd_from_10_q(financials: Any) -> int | float | None:
 def get_revenue_qtd(filing: Filing) -> int | float | None:
     """
     정기 공시(10-Q, 10-K)에서 매출의 QTD 값을 추출하는 함수
-    Args:
+    ##### Args:
         filing: edagrtools Filing 객체
-    Returns:
-        revenue: 회사마다 반환 타입이 다름(int or float)
-    Raises:
+    ##### Returns:
+        revenue: 
+            회사마다 반환 타입이 다름(int or float)
+            예외 발생시 또는 데이터 없을 시 None
+    ##### Raises:
+        Exception: edgartools get_revenue() 호출 중 예상치 못한 에러 발생 시
     """
+    if filing is None:
+        return None
+
+    if filing.form in ("10-Q", "10-Q/A"):
+        return _get_revenue_from_edgartools (filing.obj().financials)
+    elif filing.form in ("10-K", "10-K/A"):
+        return _get_revenue_qtd_from_10_k(filing)
+
+    return None
+
+def _get_revenue_qtd_from_10_k(filing: Filing) -> int | float | None:
+    """
+    FY인 10-K의 매출을 FY - (1Q,2Q,3Q)하여 4Q의 QTD를 추출하는 함수
+    ##### Args:
+        filing: edagrtools Filing 객체
+    ##### Returns:
+        revenue:
+            회사마다 반환 타입이 다름(int or float)
+            예외 발생시 또는 데이터 없을 시 None
+    ##### Raises:
+        Exception: edgartools get_revenue() 호출 중 예상치 못한 에러 발생 시
+    """
+    ytd_revenue = _get_revenue_from_edgartools(filing.obj().financials)
+
+    if ytd_revenue is None:
+        return None
