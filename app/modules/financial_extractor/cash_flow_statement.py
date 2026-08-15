@@ -172,12 +172,18 @@ def _extract_month(date_str: str | None, value_name: str) -> int | None:
         logger.bind(value_name=value_name).warning("값 없음")
         return None
 
-    if value_name == "fiscal_year_end":
+    if value_name == "fiscal_year_end": # MMDD
         start, end = 0, 2
-    elif value_name == "period_of_report":
+        expected_length = 4
+    elif value_name == "period_of_report": # YYYY-MM-DD
         start, end = 5, 7
+        expected_length = 10
     else:
         logger.bind(value_name=value_name).warning("알 수 없는 value_name")
+        return None
+
+    if len(date_str) != expected_length:
+        logger.bind(value_name=value_name, date=date_str).warning("비정상적인 date_str 길이")
         return None
 
     try:
