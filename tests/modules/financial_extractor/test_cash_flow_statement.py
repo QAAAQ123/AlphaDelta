@@ -337,3 +337,62 @@ class TestExtractMonth:
         result = _extract_month("2023-06-30", "period_of_report")
 
         assert result == 6
+
+
+"""
+_select_most_recent_filing
+1. filtered_candidate_filings가 None -> None return
+2. filtered_candidate_filings가 empyt list -> None return
+정상 3. filtered_candidate_filings가 1개 이상 -> 직전 분기 공시 return
+3.1 1개 -> 정상 return 되는지 확인
+3.2 2개 -> 정상 return
+3.3 5개 -> 가장 적절한 Filing return
+4. filing_date가 동일한 공시가 2개 있을 때 (인덱스 0, 1) -> 인덱스 0의 filing return
+   (latest()가 최신순 정렬이므로 인덱스 0이 실제로 더 나중에 처리된 filing)
+"""
+
+
+"""
+_filter_candidate_filings_by_quarter_offset
+1. current month가 None -> None return
+정상 2. 후보 filing중에 offest==PRIOR_QUARTER_OFFSET인 공시가 없음 -> empty list return
+정상 3. 후보 filing중에 직전분기 공시가 있음 -> matching_filing return
+4. 후보 filing 중 n개의 candidate_month가 None일 경우 -> matching_filing에서 제외
+5. candidate_filings가 empty list로 들어올 때 -> empty list return
+6. 모든 후보의 candidate_month가 None일 때 -> empty list return (전체 제외)
+"""
+
+"""
+_find_prior_filing_candidates(getfiling.latest: 0->N이면 최신->과거)
+1. company가 None -> None return
+2. filing_date가 None -> None return
+3. edgartools에서 예외 발생 -> Exception 발생 -> None return
+4. filing_date가 YYYY-mm-dd형식이 아닐 경우(예 MM/DD/YYYY) -> Exception 발생 -> None return
+정상 5. get_filing 조건에 맞는 공시가 하나도 없을 때 -> empty list return
+정상 6. get_filing 조건에 맞는 공시가 3개 있을 때 -> len==3인 list return
+정상 7. get_filing 조건에 맞는 공시가 6개 있을 때 0> len==6인 list return
+정상 8. get_filing 조건에 맞는 공시가 1개 있을 때 0> len==1인 list return
+    **candidate_filing[0]이 Filing type 객체가 맞는지 확인 필요 
+    
+"""
+
+"""
+_find_prior_period_filing
+1. _find_prior_filing_candidates에서 None return -> None return
+    _filter_candidate_filings_by_quarter_offset,_select_most_recent_filing 미호출
+2. _find_prior_filing_candidates에서 empty list return -> None return
+    _filter_candidate_filings_by_quarter_offset,_select_most_recent_filing 미호출
+3. _filter_candidate_filings_by_quarter_offset에서 None return -> None return
+    _select_most_recent_filing 미호출
+4. _filter_candidate_filings_by_quarter_offset에서 empty list return -> None return
+    _select_most_recent_filing 미호출
+5. current_filing의 직전 분기에 해당하는 공시 없음 -> None return
+    _find_prior_filing_candidates, _filter_candidate_filings_by_quarter_offset 호출됨
+    _select_most_recent_filing 미호출
+6. current_filing의 직전 분기에 해당하는 공시 존재 -> 해당 prior filing return
+    _find_prior_filing_candidates, _filter_candidate_filings_by_quarter_offset, _select_most_recent_filing 모두 호출됨
+7. _find_prior_period_filing이 _find_prior_filing_candidates 호출 시
+   current_filing.company와 current_filing.filing_date를 정확히 전달하는지 확인
+8. _find_prior_period_filing이 _filter_candidate_filings_by_quarter_offset 호출 시
+   candidate_filings와 current_filing_report_month를 정확히 전달하는지 확인
+"""
