@@ -3,12 +3,39 @@ from app.modules.financial_extractor.cash_flow_statement import (
     _convert_to_qtd,
     _determine_quarter,
     _determine_quarter_from_months,
-    _extract_month
+    _extract_month,
+    _select_most_recent_filing,
+    _filter_candidate_filings_by_quarter_offset,
+    _find_prior_period_filing,
+    _find_prior_filing_candidates
 )
 from app.models.enum import *
 from edgar import Filing,Company
 
 MODULE_PATH = "app.modules.financial_extractor.cash_flow_statement"
+
+
+
+@pytest.fixture
+def create_filing(mocker):
+    def _filing_factory(
+            form: str = None, 
+            fiscal_year_end: str = None, 
+            period_of_report: str = None, 
+            filing_date: str = None
+        ):
+        filing = mocker.MagicMock(spec=Filing)
+        company = mocker.MagicMock(spec=Company)
+
+        filing.company = company        
+        company.fiscal_year_end = fiscal_year_end
+
+        filing.form = form
+        filing.period_of_report = period_of_report
+        filing.filing_date = filing_date
+
+        return filing
+    return _filing_factory
 
 """
 def _convert_to_qtd(
@@ -98,27 +125,6 @@ mocking: _determine_quarter_from_months, filing
 """
 class TestDetermineQuarter:
     #form: str | None, fiscal_year_end: str | None, period_of_report: str | None
-    
-
-    @pytest.fixture
-    def create_filing(self, mocker):
-        def _filing_factory(
-                form: str = None, 
-                fiscal_year_end: str = None, 
-                period_of_report: str = None, 
-            ):
-            filing = mocker.MagicMock(spec=Filing)
-            company = mocker.MagicMock(spec=Company)
-
-            filing.company = company        
-            company.fiscal_year_end = fiscal_year_end
-
-            filing.form = form
-            filing.period_of_report = period_of_report
-
-            return filing
-        return _filing_factory
-
 
     def test_return_quarter_when_filing_is_valid(self, mocker, create_filing):
         #정상1. filing 정상  -> Q1,Q2,Q3,Q4 중 하나의 경우만
@@ -350,7 +356,71 @@ _select_most_recent_filing
 4. filing_date가 동일한 공시가 2개 있을 때 (인덱스 0, 1) -> 인덱스 0의 filing return
    (latest()가 최신순 정렬이므로 인덱스 0이 실제로 더 나중에 처리된 filing)
 """
+class TestSelectMostRecentFiling:
+    def test_return_none_when_candidate_filings_are_none(self):
+        #1. filtered_candidate_filings가 None -> None return
+        filtered_candidate_filings = None
 
+        result = _select_most_recent_filing(filtered_candidate_filings)
+
+        assert result is None
+
+    def test_return_none_when_candidate_filings_are_empty_list(self):
+        #2. filtered_candidate_filings가 empyt list -> None return
+        filtered_candidate_filings = []
+
+        result = _select_most_recent_filing(filtered_candidate_filings)
+
+        assert result is None
+
+    def test_return_valid_filing_when_len_of_candidate_filings_is_one(self, create_filing):
+        #정상 3. filtered_candidate_filings가 1개 이상 -> 직전 분기 공시 return
+        #3.1 1개 -> 정상 return 되는지 확인
+        mock_filing = create_filing(filing_date="2022-11-15")
+        filtered_candidate_filings = [mock_filing]
+
+        result = _select_most_recent_filing(filtered_candidate_filings)
+
+        assert result == mock_filing
+        assert result.filing_date == "2022-11-15"
+
+    def test_return_most_recent_filing_when_len_of_candidate_filings_is_two(self, create_filing):
+        #3.2 2개 -> 정상 return
+        older_filing = create_filing(filing_date="2022-11-15")
+        newer_filing = create_filing(filing_date="2022-12-01")
+        filtered_candidate_filings = [older_filing, newer_filing]
+
+        result = _select_most_recent_filing(filtered_candidate_filings)
+
+        assert result == newer_filing
+        assert result.filing_date == "2022-12-01"
+
+    def test_return_most_recent_filing_when_len_of_candidate_filings_is_five(self, create_filing):
+        #3.3 5개 -> 가장 적절한 Filing return
+        filing_1 = create_filing(filing_date="2022-08-10")
+        filing_2 = create_filing(filing_date="2022-11-15")
+        filing_3 = create_filing(filing_date="2022-09-30")
+        filing_4 = create_filing(filing_date="2022-12-01")
+        filing_5 = create_filing(filing_date="2022-10-20")
+        filtered_candidate_filings = [filing_1, filing_2, filing_3, filing_4, filing_5]
+
+        result = _select_most_recent_filing(filtered_candidate_filings)
+
+        assert result == filing_4
+        assert result.filing_date == "2022-12-01"
+
+    def test_return_first_index_filing_when_two_filings_have_same_date(self, create_filing):
+        #4. filing_date가 동일한 공시가 2개 있을 때 (인덱스 0, 1) -> 인덱스 0의 filing return
+        #   (latest()가 최신순 정렬이므로 인덱스 0이 실제로 더 나중에 처리된 filing)
+        filing_index_0 = create_filing(filing_date="2022-11-15")
+        filing_index_1 = create_filing(filing_date="2022-11-15")
+        filtered_candidate_filings = [filing_index_0, filing_index_1]
+
+        result = _select_most_recent_filing(filtered_candidate_filings)
+
+        assert result == filing_index_0
+        assert result.filing_date == "2022-11-15"
+        
 
 """
 _filter_candidate_filings_by_quarter_offset
@@ -361,6 +431,92 @@ _filter_candidate_filings_by_quarter_offset
 5. candidate_filings가 empty list로 들어올 때 -> empty list return
 6. 모든 후보의 candidate_month가 None일 때 -> empty list return (전체 제외)
 """
+class TestFilterCandidateFilingsByQuarterOffset:
+    def test_return_none_when_current_month_is_none(self,mocker, create_filing):
+        #1. current month가 None -> None return
+        current_month = None
+        candidate_filings = [create_filing()]
+        mock_extract_month = mocker.patch(
+            MODULE_PATH+"._extract_month"
+        )
+
+
+        result = _filter_candidate_filings_by_quarter_offset(candidate_filings,current_month)
+
+        assert result == None
+        mock_extract_month.assert_not_called()
+
+    def test_return_empty_list_when_no_filing_matches_prior_quarter_offset(self, mocker, create_filing):
+        #정상 2. 후보 filing중에 offset==PRIOR_QUARTER_OFFSET인 공시가 없음 -> empty list return
+        current_month = 11
+        filing_1 = create_filing(period_of_report="2022-10-31")  # offset = (11-10)%12 = 1
+        filing_2 = create_filing(period_of_report="2022-09-30")  # offset = (11-9)%12 = 2
+        candidate_filings = [filing_1, filing_2]
+        mock_extract_month = mocker.patch(
+            MODULE_PATH+"._extract_month",
+            side_effect=[10, 9]
+        )
+
+        result = _filter_candidate_filings_by_quarter_offset(candidate_filings, current_month)
+
+        assert result == []
+        assert mock_extract_month.call_count == 2
+        mock_extract_month.assert_any_call("2022-10-31", "period_of_report")
+        mock_extract_month.assert_any_call("2022-09-30", "period_of_report")
+
+    def test_return_matching_filing_when_prior_quarter_filing_exists(self, mocker, create_filing):
+        #정상 3. 후보 filing중에 직전분기 공시가 있음 -> matching_filing return
+        current_month = 11
+        matching = create_filing(period_of_report="2022-08-31")   # offset = (11-8)%12 = 3
+        non_matching = create_filing(period_of_report="2022-10-31")  # offset = (11-10)%12 = 1
+        candidate_filings = [matching, non_matching]
+        mock_extract_month = mocker.patch(
+            MODULE_PATH+"._extract_month",
+            side_effect=[8, 10]
+        )
+
+        result = _filter_candidate_filings_by_quarter_offset(candidate_filings, current_month)
+
+        assert result == [matching]
+        assert mock_extract_month.call_count == 2
+        mock_extract_month.assert_any_call("2022-08-31", "period_of_report")
+        mock_extract_month.assert_any_call("2022-10-31", "period_of_report")
+
+    def test_exclude_filings_when_candidate_month_is_none(self, mocker, create_filing):
+        #4. 후보 filing 중 n개의 candidate_month가 None일 경우 -> matching_filing에서 제외
+        current_month = 11
+        valid_filing = create_filing(period_of_report="2022-08-31")  # offset = (11-8)%12 = 3
+        none_filing_1 = create_filing(period_of_report=None)
+        none_filing_2 = create_filing(period_of_report=None)
+        candidate_filings = [valid_filing, none_filing_1, none_filing_2]
+        mock_extract_month = mocker.patch(
+            MODULE_PATH+"._extract_month",
+            side_effect=[8, None, None]
+        )
+
+        result = _filter_candidate_filings_by_quarter_offset(candidate_filings, current_month)
+
+        assert result == [valid_filing]
+        assert mock_extract_month.call_count == 3
+        mock_extract_month.assert_any_call("2022-08-31", "period_of_report")
+        mock_extract_month.assert_any_call(None, "period_of_report")
+
+    def test_return_empty_list_when_all_candidate_months_are_none(self, mocker, create_filing):
+        #6. 모든 후보의 candidate_month가 None일 때 -> empty list return (전체 제외)
+        current_month = 11
+        filing_1 = create_filing(period_of_report=None)
+        filing_2 = create_filing(period_of_report=None)
+        candidate_filings = [filing_1, filing_2]
+        mock_extract_month = mocker.patch(
+            MODULE_PATH+"._extract_month",
+            side_effect=[None, None]
+        )
+
+        result = _filter_candidate_filings_by_quarter_offset(candidate_filings, current_month)
+
+        assert result == []
+        assert mock_extract_month.call_count == 2
+        mock_extract_month.assert_any_call(None, "period_of_report")
 
 """
 _find_prior_filing_candidates(getfiling.latest: 0->N이면 최신->과거)
@@ -373,8 +529,114 @@ _find_prior_filing_candidates(getfiling.latest: 0->N이면 최신->과거)
 정상 7. get_filing 조건에 맞는 공시가 6개 있을 때 0> len==6인 list return
 정상 8. get_filing 조건에 맞는 공시가 1개 있을 때 0> len==1인 list return
     **candidate_filing[0]이 Filing type 객체가 맞는지 확인 필요 
-    
 """
+class TestFindPriorFilingCandidates:
+    def test_return_none_when_company_is_none(self):
+        #1. company가 None -> None return
+        company = None
+        filing_date = "2022-11-15"
+
+        result = _find_prior_filing_candidates(company, filing_date)
+
+        assert result is None
+
+    def test_return_none_when_filing_date_is_none(self, mocker):
+        #2. filing_date가 None -> None return
+        mock_company = mocker.MagicMock(spec=Company)
+        filing_date = None
+
+        result = _find_prior_filing_candidates(mock_company, filing_date)
+
+        assert result is None
+
+    def test_return_none_when_edgartools_raises_exception(self, mocker):
+        #3. edgartools에서 예외 발생 -> Exception 발생 -> None return
+        mock_company = mocker.MagicMock(spec=Company)
+        mock_company.get_filings.side_effect = Exception("unexpected error")
+        filing_date = "2022-11-15"
+
+        result = _find_prior_filing_candidates(mock_company, filing_date)
+
+        assert result is None
+
+    def test_return_none_when_filing_date_format_is_invalid(self, mocker):
+        #4. filing_date가 YYYY-mm-dd형식이 아닐 경우(예 MM/DD/YYYY) -> Exception 발생 -> None return
+        mock_company = mocker.MagicMock(spec=Company)
+        mock_company.get_filings.side_effect = Exception("invalid date format")
+        filing_date = "11/15/2022"
+
+        result = _find_prior_filing_candidates(mock_company, filing_date)
+
+        assert result is None
+
+    def test_return_empty_list_when_no_filing_exists(self, mocker):
+        #정상 5. get_filing 조건에 맞는 공시가 하나도 없을 때 -> empty list return
+        mock_company = mocker.MagicMock(spec=Company)
+        mock_company.get_filings.return_value.latest.return_value = []
+        filing_date = "2022-11-15"
+
+        result = _find_prior_filing_candidates(mock_company, filing_date)
+
+        assert result == []
+        mock_company.get_filings.assert_called_once_with(
+            form="10-Q",
+            amendments=True,
+            filing_date=f":{filing_date}"
+        )
+        mock_company.get_filings.return_value.latest.assert_called_once_with(6)
+
+    def test_return_list_when_three_filings_exist(self, mocker):
+        #정상 6. get_filing 조건에 맞는 공시가 3개 있을 때 -> len==3인 list return
+        mock_company = mocker.MagicMock(spec=Company)
+        mock_filings = [mocker.MagicMock(spec=Filing) for _ in range(3)]
+        mock_company.get_filings.return_value.latest.return_value = mock_filings
+        filing_date = "2022-11-15"
+
+        result = _find_prior_filing_candidates(mock_company, filing_date)
+
+        assert len(result) == 3
+        mock_company.get_filings.assert_called_once_with(
+            form="10-Q",
+            amendments=True,
+            filing_date=f":{filing_date}"
+        )
+        mock_company.get_filings.return_value.latest.assert_called_once_with(6)
+
+    def test_return_list_when_six_filings_exist(self, mocker):
+        #정상 7. get_filing 조건에 맞는 공시가 6개 있을 때 -> len==6인 list return
+        mock_company = mocker.MagicMock(spec=Company)
+        mock_filings = [mocker.MagicMock(spec=Filing) for _ in range(6)]
+        mock_company.get_filings.return_value.latest.return_value = mock_filings
+        filing_date = "2022-11-15"
+
+        result = _find_prior_filing_candidates(mock_company, filing_date)
+
+        assert len(result) == 6
+        mock_company.get_filings.assert_called_once_with(
+            form="10-Q",
+            amendments=True,
+            filing_date=f":{filing_date}"
+        )
+        mock_company.get_filings.return_value.latest.assert_called_once_with(6)
+
+    def test_return_list_when_one_filing_exists(self, mocker):
+        #정상 8. get_filing 조건에 맞는 공시가 1개 있을 때 -> len==1인 list return
+        #        candidate_filing[0]이 Filing type 객체가 맞는지 확인
+        mock_company = mocker.MagicMock(spec=Company)
+        mock_filing = mocker.MagicMock(spec=Filing)
+        mock_company.get_filings.return_value.latest.return_value = [mock_filing]
+        filing_date = "2022-11-15"
+
+        result = _find_prior_filing_candidates(mock_company, filing_date)
+
+        assert len(result) == 1
+        result[0] is mock_filing
+        mock_company.get_filings.assert_called_once_with(
+            form="10-Q",
+            amendments=True,
+            filing_date=f":{filing_date}"
+        )
+        mock_company.get_filings.return_value.latest.assert_called_once_with(6)
 
 """
 _find_prior_period_filing
@@ -396,3 +658,141 @@ _find_prior_period_filing
 8. _find_prior_period_filing이 _filter_candidate_filings_by_quarter_offset 호출 시
    candidate_filings와 current_filing_report_month를 정확히 전달하는지 확인
 """
+class TestFindPriorPeriodFiling:
+    def test_return_none_when_find_prior_filing_candidates_returns_none(self, mocker, create_filing):
+        #1. _find_prior_filing_candidates에서 None return -> None return
+        #   _filter_candidate_filings_by_quarter_offset, _select_most_recent_filing 미호출
+        mock_current_filing = create_filing(filing_date="2022-11-15")
+        current_filing_report_month = 9
+
+        mock_find_candidates = mocker.patch(MODULE_PATH+"._find_prior_filing_candidates", return_value=None)
+        mock_filter = mocker.patch(MODULE_PATH+"._filter_candidate_filings_by_quarter_offset")
+        mock_select = mocker.patch(MODULE_PATH+"._select_most_recent_filing")
+
+        result = _find_prior_period_filing(mock_current_filing, current_filing_report_month)
+
+        assert result is None
+        mock_filter.assert_not_called()
+        mock_select.assert_not_called()
+
+    def test_return_none_when_find_prior_filing_candidates_returns_empty_list(self, mocker, create_filing):
+        #2. _find_prior_filing_candidates에서 empty list return -> None return
+        #   _filter_candidate_filings_by_quarter_offset, _select_most_recent_filing 미호출
+        mock_current_filing = create_filing(filing_date="2022-11-15")
+        current_filing_report_month = 9
+
+        mock_find_candidates = mocker.patch(MODULE_PATH+"._find_prior_filing_candidates", return_value=[])
+        mock_filter = mocker.patch(MODULE_PATH+"._filter_candidate_filings_by_quarter_offset")
+        mock_select = mocker.patch(MODULE_PATH+"._select_most_recent_filing")
+
+        result = _find_prior_period_filing(mock_current_filing, current_filing_report_month)
+
+        assert result is None
+        mock_filter.assert_not_called()
+        mock_select.assert_not_called()
+
+    def test_return_none_when_filter_returns_none(self, mocker, create_filing):
+        #3. _filter_candidate_filings_by_quarter_offset에서 None return -> None return
+        #   _select_most_recent_filing 미호출
+        mock_current_filing = create_filing(filing_date="2022-11-15")
+        current_filing_report_month = 9
+        mock_candidates = [create_filing()]
+
+        mocker.patch(MODULE_PATH+"._find_prior_filing_candidates", return_value=mock_candidates)
+        mock_filter = mocker.patch(MODULE_PATH+"._filter_candidate_filings_by_quarter_offset", return_value=None)
+        mock_select = mocker.patch(MODULE_PATH+"._select_most_recent_filing")
+
+        result = _find_prior_period_filing(mock_current_filing, current_filing_report_month)
+
+        assert result is None
+        mock_select.assert_not_called()
+
+    def test_return_none_when_filter_returns_empty_list(self, mocker, create_filing):
+        #4. _filter_candidate_filings_by_quarter_offset에서 empty list return -> None return
+        #   _select_most_recent_filing 미호출
+        mock_current_filing = create_filing(filing_date="2022-11-15")
+        current_filing_report_month = 9
+        mock_candidates = [create_filing()]
+
+        mocker.patch(MODULE_PATH+"._find_prior_filing_candidates", return_value=mock_candidates)
+        mock_filter = mocker.patch(MODULE_PATH+"._filter_candidate_filings_by_quarter_offset", return_value=[])
+        mock_select = mocker.patch(MODULE_PATH+"._select_most_recent_filing")
+
+        result = _find_prior_period_filing(mock_current_filing, current_filing_report_month)
+
+        assert result is None
+        mock_select.assert_not_called()
+
+    def test_return_none_when_no_prior_quarter_filing_exists(self, mocker, create_filing):
+        #5. current_filing의 직전 분기에 해당하는 공시 없음 -> None return
+        #   _find_prior_filing_candidates, _filter_candidate_filings_by_quarter_offset 호출됨
+        #   _select_most_recent_filing 미호출
+        mock_current_filing = create_filing(filing_date="2022-11-15")
+        current_filing_report_month = 9
+        mock_candidates = [create_filing()]
+
+        mock_find_candidates = mocker.patch(MODULE_PATH+"._find_prior_filing_candidates", return_value=mock_candidates)
+        mock_filter = mocker.patch(MODULE_PATH+"._filter_candidate_filings_by_quarter_offset", return_value=[])
+        mock_select = mocker.patch(MODULE_PATH+"._select_most_recent_filing")
+
+        result = _find_prior_period_filing(mock_current_filing, current_filing_report_month)
+
+        assert result is None
+        mock_find_candidates.assert_called_once()
+        mock_filter.assert_called_once()
+        mock_select.assert_not_called()
+
+    def test_return_prior_filing_when_prior_quarter_filing_exists(self, mocker, create_filing):
+        #6. current_filing의 직전 분기에 해당하는 공시 존재 -> 해당 prior filing return
+        #   _find_prior_filing_candidates, _filter_candidate_filings_by_quarter_offset, _select_most_recent_filing 모두 호출됨
+        mock_current_filing = create_filing(filing_date="2022-11-15")
+        current_filing_report_month = 9
+        mock_candidates = [create_filing()]
+        mock_filtered = [create_filing()]
+        mock_prior_filing = create_filing(filing_date="2022-08-15")
+
+        mock_find_candidates = mocker.patch(MODULE_PATH+"._find_prior_filing_candidates", return_value=mock_candidates)
+        mock_filter = mocker.patch(MODULE_PATH+"._filter_candidate_filings_by_quarter_offset", return_value=mock_filtered)
+        mock_select = mocker.patch(MODULE_PATH+"._select_most_recent_filing", return_value=mock_prior_filing)
+
+        result = _find_prior_period_filing(mock_current_filing, current_filing_report_month)
+
+        assert result == mock_prior_filing
+        mock_find_candidates.assert_called_once()
+        mock_filter.assert_called_once()
+        mock_select.assert_called_once()
+
+    def test_find_prior_filing_candidates_receives_correct_args(self, mocker, create_filing):
+        #7. _find_prior_period_filing이 _find_prior_filing_candidates 호출 시
+        #   current_filing.company와 current_filing.filing_date를 정확히 전달하는지 확인
+        mock_current_filing = create_filing(filing_date="2022-11-15")
+        current_filing_report_month = 9
+
+        mock_find_candidates = mocker.patch(MODULE_PATH+"._find_prior_filing_candidates", return_value=None)
+        mocker.patch(MODULE_PATH+"._filter_candidate_filings_by_quarter_offset")
+        mocker.patch(MODULE_PATH+"._select_most_recent_filing")
+
+        _find_prior_period_filing(mock_current_filing, current_filing_report_month)
+
+        mock_find_candidates.assert_called_once_with(
+            mock_current_filing.company,
+            mock_current_filing.filing_date
+        )
+
+    def test_filter_candidate_filings_receives_correct_args(self, mocker, create_filing):
+        #8. _find_prior_period_filing이 _filter_candidate_filings_by_quarter_offset 호출 시
+        #   candidate_filings와 current_filing_report_month를 정확히 전달하는지 확인
+        mock_current_filing = create_filing(filing_date="2022-11-15")
+        current_filing_report_month = 9
+        mock_candidates = [create_filing()]
+
+        mocker.patch(MODULE_PATH+"._find_prior_filing_candidates", return_value=mock_candidates)
+        mock_filter = mocker.patch(MODULE_PATH+"._filter_candidate_filings_by_quarter_offset", return_value=None)
+        mocker.patch(MODULE_PATH+"._select_most_recent_filing")
+
+        _find_prior_period_filing(mock_current_filing, current_filing_report_month)
+
+        mock_filter.assert_called_once_with(
+            mock_candidates,
+            current_filing_report_month
+        )
