@@ -15,27 +15,7 @@ from edgar import Financials, Filing, Company
 #from edgar import ValidationError
 from app.core import logger
 from app.models import Quarter
-
-# def get_items_qtd_cash_flow_statement(current_filing: Filing, concept_getters: dict) -> dict:
-#     """
-#     현금흐름표의 재무 항목들을 YTD -> QTD로 변환
-#     ### Args:
-#         - filing: 재무 정보를 가져올 정기 및 수정 공시(10-Q(/A), 10-K(/A))
-#         - conecpt: 원하는 재무 컨셉(예: ["operating_cash_flow", "free_cash_flow"])
-#         - getters: 각 concept에 대응하는 람다 함수 리스트 
-#                  (각 함수는 TenQ -> float 서명)
-#                  concepts와 getters의 순서는 일치해야 함
-#     ### Returns:
-#         dict: {"quarter": str, "values": {"concept1": float, "concept2": float}}
-#     ### Raises:
-#         xxxx
-#     ### Example:
-#         result = get_items_qtd_cash_flow_statement(
-#             target_filing,
-#             ["operating_cash_flow", "free_cash_flow"],
-#             [lambda f: f.get_operating_cash_flow(), lambda f: f.get_free_cash_flow()]
-#         )
-#     """
+    
 QUARTER_MONTH_DIFF_MAP = {
     9: Quarter.Q1,
     6: Quarter.Q2,
@@ -43,6 +23,75 @@ QUARTER_MONTH_DIFF_MAP = {
 }
 
 PRIOR_QUARTER_OFFSET = 3
+
+def get_items_qtd_cash_flow_statement(current_filing: Filing, concept_getters: dict) -> dict:
+    """
+    현금흐름표의 재무 항목들을 YTD -> QTD로 변환
+    ### Args:
+        - filing: 재무 정보를 가져올 정기 및 수정 공시(10-Q(/A), 10-K(/A))
+        - concept_getters: 각 concept에 대응하는 람다 함수 딕셔너리
+            (각 함수는 Filing -> float 서명)
+            개념명과 getter 함수의 매핑 필요
+    ### Returns:
+            dict | None: {"quarter": str, "values": {"concept1": float, "concept2": float}}
+            None: current_filing이 None인 경우
+    ### Raises:
+        KeyError: concept_getters에서 필요한 키가 없을 때
+        TypeError: getter 함수 실행 중 타입 오류
+    ### Example:
+        result = get_items_qtd_cash_flow_statement(
+            target_filing,
+            {
+                "operating_cash_flow": lambda f: f.get_operating_cash_flow(),
+                "free_cash_flow": lambda f: f.get_free_cash_flow()
+            }
+        )
+    """
+    if current_filing is None:
+        return None
+
+    current_quarter = _determine_quarter(current_filing)
+    if current_quarter is None:
+        return None
+
+    current_financials, prior_financials = _get_financials(current_filing, current_quarter)
+    if current_financials is None and prior_financials is None:
+        return None
+
+    return {
+        "quarter": current_quarter,
+        "values": {
+            concept: _convert_to_qtd(current_financials,prior_financials,current_quarter,getter)
+            for concept, getter in concept_getters.items()
+        }
+    }
+
+def _get_financials(
+    current_filing: Filing, current_quarter: Quarter
+) -> tuple[Financials | None, Financials | None]:
+    """
+    책임: 현재 공시와 직전분기 공시의 financials를 찾기
+    ### Args:
+        current_fiilng: 현재 정기 공시
+        current_quarter: 현재 정기 공시의 분기
+    ### Returns:
+        - tuple(현재 financials, 직전 financials)
+        - Q1이면 직전분기 financials는 None
+    """
+    current_financials = current_filing.obj().financials
+
+    if current_quarter is Quarter.Q1:
+        return current_financials, None
+
+    prior_filing = _find_prior_period_filing(current_filing, current_filing.period_of_report)
+    if prior_filing is None:
+        return None, None
+    
+    prior_financials = prior_filing.obj().financials
+    if prior_financials is None:
+        return None, None
+
+    return current_financials, prior_financials
 
 def _convert_to_qtd(
         current_financials: Financials, 
