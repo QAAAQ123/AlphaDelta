@@ -8,6 +8,17 @@
 2분기: 2분기 OCF - 1분기 OCF
 3분기: 3분기 OCF - 2분기 OCF
 4분기: 1년 OCF - 1,2,3분기 OCF
+
+1. get_items_qtd_cash_flow_statement
+2. _get_financials
+3. _convert_to_qtd
+4. _determine_quarter
+5. _find_prior_period_filing
+6. _determine_quarter_from_months
+7. _extract_month
+8. _find_prior_filing_candidates
+9. _filter_candidate_filings_by_quarter_offset
+10. _select_most_recent_filing
 """
 
 from typing import Callable
@@ -83,6 +94,10 @@ def _get_financials(
     if current_quarter is Quarter.Q1:
         return current_financials, None
 
+    current_month = _extract_month(current_filing.period_of_report, "period_of_report")
+    if current_month is None:
+        return None, None
+
     prior_filing = _find_prior_period_filing(current_filing, current_filing.period_of_report)
     if prior_filing is None:
         return None, None
@@ -139,7 +154,6 @@ def _convert_to_qtd(
         return None
 
     return current_ytd - prior_ytd
-
 
 def _determine_quarter(filing: Filing) -> Quarter | None:
     """
@@ -231,7 +245,6 @@ def _determine_quarter_from_months(form: str | None, fiscal_year_end: str | None
     ).warning("분기 결정 실패")
     # 원인 불명확-신뢰할 수 없는 데이터로 취급
     return None 
-
 
 def _extract_month(date_str: str | None, value_name: str) -> int | None:
     """

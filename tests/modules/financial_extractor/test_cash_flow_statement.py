@@ -806,6 +806,7 @@ _get_financials
 정상2. Q2,3,4일 경우 -> (current,prior) return
 3. prior_filing이 None인 경우 -> (None,None) return
 4. prior_financials가 None인 경우 -> (None,None) return
+5. current_filing의 월 추출에 실패한 경우 -> (None, None) return
 """
 class TestGetFinancials:
     def test_return_current_and_none_when_current_quarter_is_q1(self, mocker, create_filing):
@@ -818,11 +819,15 @@ class TestGetFinancials:
         mock_find_prior_filing = mocker.patch(
             MODULE_PATH+"._find_prior_period_filing"
         )
+        mock_extract_month = mocker.patch(
+            MODULE_PATH + "._extract_month"
+        )
 
         result = _get_financials(mock_filing, stub_current_quarter)
 
         assert result == (stub_financials, None)
         mock_find_prior_filing.assert_not_called()
+        mock_extract_month.assert_not_called()
 
     def test_return_current_and_prior_when_quarter_is_not_q1(self, mocker, create_filing):
         #정상2. Q2,3,4일 경우 -> (current,prior) return
@@ -838,12 +843,16 @@ class TestGetFinancials:
             MODULE_PATH + "._find_prior_period_filing",
             return_value=mock_prior_filing
         )
+        mock_extract_month = mocker.patch(
+            MODULE_PATH + "._extract_month",
+            return_value=12
+        )
 
         result = _get_financials(mock_filing, stub_current_quarter)
 
         mock_find_prior_filing.assert_called_once_with(mock_filing, mock_filing.period_of_report)
+        mock_extract_month.assert_called_once_with(mock_filing.period_of_report, "period_of_report")
         assert result == (stub_current_financials, stub_prior_financials)
-
 
     def test_return_none_none_when_prior_filing_is_none(self, mocker, create_filing):
         #3. prior_filing이 None인 경우 -> (None,None) return
@@ -855,12 +864,16 @@ class TestGetFinancials:
             MODULE_PATH + "._find_prior_period_filing",
             return_value=None
         )
+        mock_extract_month = mocker.patch(
+            MODULE_PATH + "._extract_month",
+            return_value=12
+        )
 
         result = _get_financials(mock_filing, stub_current_quarter)
 
         mock_find_prior_filing.assert_called_once_with(mock_filing, mock_filing.period_of_report)
+        mock_extract_month.assert_called_once_with(mock_filing.period_of_report, "period_of_report")
         assert result == (None, None)
-
 
     def test_return_none_none_when_prior_financials_is_none(self, mocker, create_filing):
         #4. prior_financials가 None인 경우 -> (None,None) return
@@ -874,12 +887,33 @@ class TestGetFinancials:
             MODULE_PATH + "._find_prior_period_filing",
             return_value=mock_prior_filing
         )
+        mock_extract_month = mocker.patch(
+            MODULE_PATH + "._extract_month",
+            return_value=12
+        )
 
         result = _get_financials(mock_filing, stub_current_quarter)
 
         mock_find_prior_filing.assert_called_once_with(mock_filing, mock_filing.period_of_report)
+        mock_extract_month.assert_called_once_with(mock_filing.period_of_report, "period_of_report")
         assert result == (None, None)
 
+    def test_return_none_none_when_current_month_is_none(self, mocker, create_filing):
+        #5. current_filing의 월 추출에 실패한 경우 -> (None, None) return
+        mock_filing = create_filing(period_of_report="21/10/2022")
+        stub_current_quarter = Quarter.Q2
+
+        mock_extract_month = mocker.patch(
+            MODULE_PATH + "._extract_month",
+            return_value = None
+        )
+        stub_find_prior_period_filing = mocker.patch(MODULE_PATH + "._find_prior_period_filing")
+
+        result = _get_financials(mock_filing, stub_current_quarter)
+
+        assert result == (None, None)
+        stub_find_prior_period_filing.assert_not_called()
+        mock_extract_month.assert_called_once_with(mock_filing.period_of_report,"period_of_report")
 """
 get_items_qtd_cash_flow_statement
 1. current_filing이 None -> None return
