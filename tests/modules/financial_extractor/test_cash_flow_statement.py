@@ -7,10 +7,12 @@ from app.modules.financial_extractor.cash_flow_statement import (
     _select_most_recent_filing,
     _filter_candidate_filings_by_quarter_offset,
     _find_prior_period_filing,
-    _find_prior_filing_candidates
+    _find_prior_filing_candidates,
+    _get_financials,
+    get_items_qtd_cash_flow_statement
 )
 from app.models.enum import *
-from edgar import Filing,Company
+from edgar import Filing,Company,Financials
 
 MODULE_PATH = "app.modules.financial_extractor.cash_flow_statement"
 
@@ -805,6 +807,78 @@ _get_financials
 3. prior_filing이 None인 경우 -> (None,None) return
 4. prior_financials가 None인 경우 -> (None,None) return
 """
+class TestGetFinancials:
+    def test_return_current_and_none_when_current_quarter_is_q1(self, mocker, create_filing):
+        #정상1. current_quarter가 Q1일 경우 -> (current,none) return
+        mock_filing = create_filing()
+        stub_current_quarter = Quarter.Q1
+        stub_financials = mocker.MagicMock(spec=Financials)
+        mock_filing.obj.return_value.financials = stub_financials
+
+        mock_find_prior_filing = mocker.patch(
+            MODULE_PATH+"._find_prior_period_filing"
+        )
+
+        result = _get_financials(mock_filing, stub_current_quarter)
+
+        assert result == (stub_financials, None)
+        mock_find_prior_filing.assert_not_called()
+
+    def test_return_current_and_prior_when_quarter_is_not_q1(self, mocker, create_filing):
+        #정상2. Q2,3,4일 경우 -> (current,prior) return
+        mock_filing = create_filing(period_of_report="2022-12-30")
+        stub_current_quarter = Quarter.Q2
+        stub_current_financials = mocker.MagicMock(spec=Financials)
+        stub_prior_financials = mocker.MagicMock(spec=Financials)
+        mock_filing.obj.return_value.financials = stub_current_financials
+
+        mock_prior_filing = mocker.MagicMock(spec=Filing)
+        mock_prior_filing.obj.return_value.financials = stub_prior_financials
+        mock_find_prior_filing = mocker.patch(
+            MODULE_PATH + "._find_prior_period_filing",
+            return_value=mock_prior_filing
+        )
+
+        result = _get_financials(mock_filing, stub_current_quarter)
+
+        mock_find_prior_filing.assert_called_once_with(mock_filing, mock_filing.period_of_report)
+        assert result == (stub_current_financials, stub_prior_financials)
+
+
+    def test_return_none_none_when_prior_filing_is_none(self, mocker, create_filing):
+        #3. prior_filing이 None인 경우 -> (None,None) return
+        mock_filing = create_filing(period_of_report="2022-12-30")
+        stub_current_quarter = Quarter.Q2
+        mock_filing.obj.return_value.financials = mocker.MagicMock(spec=Financials)
+
+        mock_find_prior_filing = mocker.patch(
+            MODULE_PATH + "._find_prior_period_filing",
+            return_value=None
+        )
+
+        result = _get_financials(mock_filing, stub_current_quarter)
+
+        mock_find_prior_filing.assert_called_once_with(mock_filing, mock_filing.period_of_report)
+        assert result == (None, None)
+
+
+    def test_return_none_none_when_prior_financials_is_none(self, mocker, create_filing):
+        #4. prior_financials가 None인 경우 -> (None,None) return
+        mock_filing = create_filing(period_of_report="2022-12-30")
+        stub_current_quarter = Quarter.Q2
+        mock_filing.obj.return_value.financials = mocker.MagicMock(spec=Financials)
+
+        mock_prior_filing = mocker.MagicMock(spec=Filing)
+        mock_prior_filing.obj.return_value.financials = None
+        mock_find_prior_filing = mocker.patch(
+            MODULE_PATH + "._find_prior_period_filing",
+            return_value=mock_prior_filing
+        )
+
+        result = _get_financials(mock_filing, stub_current_quarter)
+
+        mock_find_prior_filing.assert_called_once_with(mock_filing, mock_filing.period_of_report)
+        assert result == (None, None)
 
 """
 get_items_qtd_cash_flow_statement
@@ -818,3 +892,126 @@ get_items_qtd_cash_flow_statement
 정상5. current_quarter가 Q1 -> prior_financials=None인 채로 dict 정상 return
        (values 안에서 _convert_to_qtd가 prior=None으로 호출되는지 확인)
 """
+class TestGetItemsQtdCashFlowStatement:
+    def test_return_none_when_current_filing_is_none(self):
+        # 1. current_filing이 None -> None return
+        result = get_items_qtd_cash_flow_statement(None, {})
+
+        assert result is None
+
+    def test_return_none_when_current_quarter_is_none(self, mocker, create_filing):
+        # 2. current_quarter가 None -> None return
+        mock_filing = create_filing()
+        mock_helper = mocker.patch(MODULE_PATH + "._determine_quarter", return_value=None)
+        mock_get_financials = mocker.patch(MODULE_PATH + "._get_financials") 
+
+        result = get_items_qtd_cash_flow_statement(mock_filing, {})
+        mock_helper.assert_called_once_with(mock_filing)
+        mock_get_financials.assert_not_called()
+        assert result is None
+
+    def test_return_none_when_both_financials_are_none(self, mocker, create_filing):
+        # 3. current_financials과 prior_financials 둘다 None -> None return
+        mock_filing = create_filing()
+        mock_determine_quarter = mocker.patch(MODULE_PATH + "._determine_quarter", return_value=Quarter.Q2)
+        mock_get_financials = mocker.patch(MODULE_PATH + "._get_financials", return_value=(None, None))
+
+        result = get_items_qtd_cash_flow_statement(mock_filing, {})
+
+        #then
+        mock_determine_quarter.assert_called_once_with(mock_filing)
+        mock_get_financials.assert_called_once_with(mock_filing, Quarter.Q2)
+
+        assert result is None
+
+    def test_return_dict_with_one_concept(self, mocker, create_filing):
+        # 정상4.1 get_operating_cash_flow() 한개 -> ocf한개 return
+        mock_filing = create_filing()
+        mock_determine_quarter = mocker.patch(MODULE_PATH + "._determine_quarter", return_value=Quarter.Q2)
+        stub_current_financials = mocker.MagicMock(spec=Financials)
+        stub_prior_financials = mocker.MagicMock(spec=Financials)
+        mock_get_financials = mocker.patch(MODULE_PATH + "._get_financials", return_value=(stub_current_financials, stub_prior_financials))
+        mock_convert_to_qtd = mocker.patch(MODULE_PATH + "._convert_to_qtd", return_value=100.0)
+
+        concept_getters = {"operating_cash_flow": lambda f: f.get_operating_cash_flow()}
+        result = get_items_qtd_cash_flow_statement(mock_filing, concept_getters)
+
+        #then
+        mock_determine_quarter.assert_called_once_with(mock_filing)
+        mock_get_financials.assert_called_once_with(mock_filing, Quarter.Q2)
+
+        assert mock_convert_to_qtd.call_count == 1
+        assert result == {"quarter": Quarter.Q2, "values": {"operating_cash_flow": 100.0}}
+
+    def test_return_dict_with_two_concepts(self, mocker, create_filing):
+        # 정상4.2 get_capital_expenditures(),get_operating_cash_flow() 2개 -> ocf,capex 2개 return
+        mock_filing = create_filing()
+        mock_determine_quarter = mocker.patch(MODULE_PATH + "._determine_quarter", return_value=Quarter.Q2)
+        stub_current_financials = mocker.MagicMock(spec=Financials)
+        stub_prior_financials = mocker.MagicMock(spec=Financials)
+        mock_get_financials = mocker.patch(MODULE_PATH + "._get_financials", return_value=(stub_current_financials, stub_prior_financials))
+        mock_convert_to_qtd =mocker.patch(MODULE_PATH + "._convert_to_qtd", side_effect=[100.0, 200.0])
+
+        concept_getters = {
+            "operating_cash_flow": lambda f: f.get_operating_cash_flow(),
+            "capital_expenditures": lambda f: f.get_capital_expenditures(),
+        }
+        result = get_items_qtd_cash_flow_statement(mock_filing, concept_getters)
+
+        #then
+        mock_determine_quarter.assert_called_once_with(mock_filing)
+        mock_get_financials.assert_called_once_with(mock_filing, Quarter.Q2)
+        assert mock_convert_to_qtd.call_count == 2
+        assert result == {
+            "quarter": Quarter.Q2,
+            "values": {
+                "operating_cash_flow": 100.0,
+                "capital_expenditures": 200.0,
+            }
+        }
+
+    def test_return_dict_with_three_concepts(self, mocker, create_filing):
+        # 정상4.3 get_free_cash_flow(),get_capital_expenditures(),get_operating_cash_flow() 3개 -> ocf,capex,fcf 3개 return
+        mock_filing = create_filing()
+        mock_determine_quarter = mocker.patch(MODULE_PATH + "._determine_quarter", return_value=Quarter.Q2)
+        stub_current_financials = mocker.MagicMock(spec=Financials)
+        stub_prior_financials = mocker.MagicMock(spec=Financials)
+        mock_get_financials = mocker.patch(MODULE_PATH + "._get_financials", return_value=(stub_current_financials, stub_prior_financials))
+        mock_convert_to_qtd = mocker.patch(MODULE_PATH + "._convert_to_qtd", side_effect=[100.0, 200.0, 300.0])
+
+        concept_getters = {
+            "operating_cash_flow": lambda f: f.get_operating_cash_flow(),
+            "capital_expenditures": lambda f: f.get_capital_expenditures(),
+            "free_cash_flow": lambda f: f.get_free_cash_flow(),
+        }
+        result = get_items_qtd_cash_flow_statement(mock_filing, concept_getters)
+
+
+        #then
+        mock_determine_quarter.assert_called_once_with(mock_filing)
+        mock_get_financials.assert_called_once_with(mock_filing, Quarter.Q2)
+        assert mock_convert_to_qtd.call_count == 3
+        assert result == {
+            "quarter": Quarter.Q2,
+            "values": {
+                "operating_cash_flow": 100.0,
+                "capital_expenditures": 200.0,
+                "free_cash_flow": 300.0,
+            }
+        }
+
+    def test_return_dict_with_prior_none_when_quarter_is_q1(self, mocker, create_filing):
+        # 정상5. current_quarter가 Q1 -> prior_financials=None인 채로 dict 정상 return
+        mock_filing = create_filing()
+        mock_determine_quarter = mocker.patch(MODULE_PATH + "._determine_quarter", return_value=Quarter.Q1)
+        stub_current_financials = mocker.MagicMock(spec=Financials)
+        mock_get_financials = mocker.patch(MODULE_PATH + "._get_financials", return_value=(stub_current_financials, None))
+        mock_convert_to_qtd = mocker.patch(MODULE_PATH + "._convert_to_qtd", return_value=100.0)
+
+        concept_getters = {"operating_cash_flow": lambda f: f.get_operating_cash_flow()}
+        result = get_items_qtd_cash_flow_statement(mock_filing, concept_getters)
+
+        assert result == {"quarter": Quarter.Q1, "values": {"operating_cash_flow": 100.0}}
+        mock_determine_quarter.assert_called_once_with(mock_filing)
+        mock_get_financials.assert_called_once_with(mock_filing, Quarter.Q1)
+        mock_convert_to_qtd.assert_called_once_with(stub_current_financials, None, Quarter.Q1, concept_getters["operating_cash_flow"])
