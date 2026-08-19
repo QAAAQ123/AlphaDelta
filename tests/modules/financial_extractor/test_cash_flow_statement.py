@@ -796,3 +796,25 @@ class TestFindPriorPeriodFiling:
             mock_candidates,
             current_filing_report_month
         )
+
+
+"""
+_get_financials
+정상1. current_quarter가 Q1일 경우 -> (current,none) return
+정상2. Q2,3,4일 경우 -> (current,prior) return
+3. prior_filing이 None인 경우 -> (None,None) return
+4. prior_financials가 None인 경우 -> (None,None) return
+"""
+
+"""
+get_items_qtd_cash_flow_statement
+1. current_filing이 None -> None return
+2. current_quarter가 None -> None return
+3. current_financials과 prior_financials 둘다 None -> None return
+정상4. valid args -> dict return
+정상4.1 get_operating_cash_flow() 한개 -> ocf한개 return
+정상4.2 get_capital_expenditures(),get_operating_cash_flow() 2개 -> ocf,capex 2개 return
+정상4.3 get_free_cash_flow(),get_capital_expenditures(),get_operating_cash_flow() 3개 -> ocf,capex,fcf 3s개 return
+정상5. current_quarter가 Q1 -> prior_financials=None인 채로 dict 정상 return
+       (values 안에서 _convert_to_qtd가 prior=None으로 호출되는지 확인)
+"""
