@@ -26,3 +26,4 @@ pydantic-settings==2.5.0
 pytest==8.2.2
 loguru==0.7.2
 pytest-mock>=3.10
+pytest-recording>=0.12.0
