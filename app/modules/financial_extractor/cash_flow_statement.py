@@ -7,7 +7,7 @@
 1분기: OCF 그대로
 2분기: 2분기 OCF - 1분기 OCF
 3분기: 3분기 OCF - 2분기 OCF
-4분기: 1년 OCF - 1,2,3분기 OCF
+4분기: 1년 OCF - 3분기 OCF
 
 1. get_items_qtd_cash_flow_statement
 2. _get_financials
@@ -41,7 +41,7 @@ def get_items_qtd_cash_flow_statement(current_filing: Filing, concept_getters: d
     ### Args:
         - filing: 재무 정보를 가져올 정기 및 수정 공시(10-Q(/A), 10-K(/A))
         - concept_getters: 각 concept에 대응하는 람다 함수 딕셔너리
-            (각 함수는 Filing -> float 서명)
+            (각 함수는 Financials -> float 서명)
             개념명과 getter 함수의 매핑 필요
     ### Returns:
             dict | None: {"quarter": str, "values": {"concept1": float, "concept2": float}}
@@ -67,7 +67,7 @@ def get_items_qtd_cash_flow_statement(current_filing: Filing, concept_getters: d
 
     current_financials, prior_financials = _get_financials(current_filing, current_quarter)
     if current_financials is None and prior_financials is None:
-        return None
+        return None 
 
     return {
         "quarter": current_quarter,
@@ -98,7 +98,7 @@ def _get_financials(
     if current_month is None:
         return None, None
 
-    prior_filing = _find_prior_period_filing(current_filing, current_filing.period_of_report)
+    prior_filing = _find_prior_period_filing(current_filing, current_month)
     if prior_filing is None:
         return None, None
     
@@ -117,7 +117,7 @@ def _convert_to_qtd(
     """
     책임: 현재,이전 financials의 YTD를 QTD로 변환
     ### Args: 
-        - current_financials: 현재 분기 financials
+        - current_financials: 현재 분기 financials  
         - prior_financials: 전분기 financials
         - current_quarter: 분기 정보
         - getter: financials.getter()를 호출하는 람다 일급객체
@@ -170,7 +170,7 @@ def _determine_quarter(filing: Filing) -> Quarter | None:
             logger.bind(form=form).warning("form 없음")
             return None
 
-        fiscal_year_end = filing.company.fiscal_year_end
+        fiscal_year_end = filing.get_entity().fiscal_year_end
         if fiscal_year_end is None:
             logger.bind(fiscal_year_end=fiscal_year_end).warning("fiscal_year_end 없음")
             return None
@@ -196,7 +196,7 @@ def _find_prior_period_filing(current_filing: Filing, current_filing_report_mont
         None: 값이 없거나 에러 발생
     """
 
-    candidate_filings = _find_prior_filing_candidates(current_filing.company, current_filing.filing_date)
+    candidate_filings = _find_prior_filing_candidates(current_filing.get_entity(), current_filing.filing_date)
     if not candidate_filings: #None or empty list
         return None
     
@@ -375,16 +375,3 @@ def _select_most_recent_filing(filtered_candidate_filings: list[Filing]) -> Fili
             most_recent_filing = f
 
     return most_recent_filing
-
-        
-
-"""
-순 차입금 변동 QTD 계산 모듈
-- 순 차입금 변동은 Cash flow statement의 항목이여서 YTD이다.
-- YTD이기 때문에, 현재 분기 순 차입금 변동 - 직전 분기 순 차입금 변동를 해주면 QTD를 얻을 수 있다.
-- 차입금은 LongTermDebtNoncurrent와 ShortTermBorrowings의 합이다.
-short_term = xbrl.query().by_concept("us-gaap:ShortTermBorrowings").to_dataframe()
-long_term = xbrl.query().by_concept("us-gaap:LongTermDebtNoncurrent").to_dataframe()
-net_borrowing = short_term + long_term
-return net_borrowing.iloc[-1] - net_borrowing.iloc[-2]
-"""
