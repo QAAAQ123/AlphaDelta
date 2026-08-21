@@ -2,6 +2,11 @@
 로깅 설정 모듈.
 이 모듈은 애플리케이션에서 단 한 번, 가장 먼저 import되어야 합니다.
 다른 모든 모듈은 `from config.logger import logger` 로만 사용하세요.
+
+사용 예시:
+with logger.contextualize(domain="USER", user_id=123, request_id="abc"):
+    logger.info("처리 시작")   # → [USER] user_id=123 request_id=abc - 처리 시작
+    some_function()
 """
 import sys
 #from pathlib import Path
