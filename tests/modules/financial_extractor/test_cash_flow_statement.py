@@ -29,7 +29,7 @@ def create_filing(mocker):
         filing = mocker.MagicMock(spec=Filing)
         company = mocker.MagicMock(spec=Company)
 
-        filing.company = company        
+        filing.get_entity.return_value = company        
         company.fiscal_year_end = fiscal_year_end
 
         filing.form = form
@@ -194,7 +194,7 @@ class TestDetermineQuarter:
             fiscal_year_end="1231",
             period_of_report="2023-06-30"
         )
-        type(mock_filing).company = mocker.PropertyMock(side_effect=Exception("Edgartools error"))
+        type(mock_filing).form = mocker.PropertyMock(side_effect=Exception("Edgartools error"))
         mock_helper = mocker.patch(MODULE_PATH + "._determine_quarter_from_months")
 
         result = _determine_quarter(mock_filing)
@@ -777,7 +777,7 @@ class TestFindPriorPeriodFiling:
         _find_prior_period_filing(mock_current_filing, current_filing_report_month)
 
         mock_find_candidates.assert_called_once_with(
-            mock_current_filing.company,
+            mock_current_filing.get_entity(),
             mock_current_filing.filing_date
         )
 
@@ -850,7 +850,7 @@ class TestGetFinancials:
 
         result = _get_financials(mock_filing, stub_current_quarter)
 
-        mock_find_prior_filing.assert_called_once_with(mock_filing, mock_filing.period_of_report)
+        mock_find_prior_filing.assert_called_once_with(mock_filing, 12)
         mock_extract_month.assert_called_once_with(mock_filing.period_of_report, "period_of_report")
         assert result == (stub_current_financials, stub_prior_financials)
 
@@ -871,7 +871,7 @@ class TestGetFinancials:
 
         result = _get_financials(mock_filing, stub_current_quarter)
 
-        mock_find_prior_filing.assert_called_once_with(mock_filing, mock_filing.period_of_report)
+        mock_find_prior_filing.assert_called_once_with(mock_filing, 12)
         mock_extract_month.assert_called_once_with(mock_filing.period_of_report, "period_of_report")
         assert result == (None, None)
 
@@ -894,7 +894,7 @@ class TestGetFinancials:
 
         result = _get_financials(mock_filing, stub_current_quarter)
 
-        mock_find_prior_filing.assert_called_once_with(mock_filing, mock_filing.period_of_report)
+        mock_find_prior_filing.assert_called_once_with(mock_filing, 12)
         mock_extract_month.assert_called_once_with(mock_filing.period_of_report, "period_of_report")
         assert result == (None, None)
 
