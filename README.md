@@ -222,8 +222,133 @@ FCFE가 매년 성장하는 것을 반영한 주가라는 전제에서 출발합
 <br>
 <br>
 
+## 5. 아키텍처 
+<img width="1692" height="929" alt="ChatGPT Image 2026년 8월 23일 오후 09_12_57" src="https://github.com/user-attachments/assets/daa38532-0451-4889-a2fd-3def32d891ff" />
 
-## 5. 프로젝트 구조
+
+<br>
+<br>
+<br>
+
+
+## 6. ERD
+- Filing의 선 `amends`는 Filing을 자기 참조하는 선입니다.(랜더링 오류)
+```mermaid
+erDiagram
+
+    DISCOUNT_RATE {
+        int id PK
+        float risk_free_rate
+        float average_market_return
+        int year
+        enum quarter
+    }
+
+    COMPANY {
+        int id PK
+        string name
+        string ticker UK
+        string cik UK
+        enum fiscal_year_end
+    }
+
+    FILING {
+        int id PK
+        string accession_number UK
+        enum form_type
+        string filing_date
+        int year
+        enum quarter
+        enum analysis_status
+        int company_id FK
+        int amends_filing_id FK
+    }
+
+    PERIODIC_FILING_ANALYSIS {
+        int id PK
+        string part
+        enum item
+        string difference
+        string context
+        enum language
+        int filing_id FK
+    }
+
+    FINANCE {
+        int id PK
+        bigint revenue
+        bigint ocf
+        bigint capex
+        bigint net_borrowing
+        float beta
+        decimal stock_price
+        jsonb raw_finances
+        int filing_id FK
+    }
+
+    DCF {
+        int id PK
+        enum metric_name
+        float median_value
+        float median_ci_lower
+        float median_ci_upper
+        int sample_size
+        float confidence_level
+        int filing_id FK
+    }
+
+    USER {
+        int id PK
+        string email UK
+        enum tier
+        enum role
+        enum provider
+        int monthly_slot_switch_count
+    }
+
+    FILING_VIEW_HISTORY {
+        int id PK
+        datetime view_at
+        int user_id FK
+        int filing_id FK
+    }
+
+    USER_WATCHLIST_SLOT {
+        int id PK
+        boolean is_alarm_enable
+        int user_id FK
+        int company_id FK
+    }
+
+    USER_VALUATION_SCENARIO {
+        int id PK
+        jsonb parameters
+        int user_id FK
+        int company_id FK
+    }
+
+    COMPANY ||--o{ FILING : "has"
+    COMPANY ||--o{ USER_WATCHLIST_SLOT : "watched by"
+    COMPANY ||--o{ USER_VALUATION_SCENARIO : "valuated by"
+
+    FILING ||--o{ PERIODIC_FILING_ANALYSIS : "has"
+    FILING ||--o| FINANCE : "has"
+    FILING ||--o{ DCF : "has"
+    FILING ||--o{ FILING_VIEW_HISTORY : "viewed"
+
+    USER ||--o{ USER_WATCHLIST_SLOT : "manages"
+    USER ||--o{ FILING_VIEW_HISTORY : "views"
+    USER ||--o{ USER_VALUATION_SCENARIO : "creates"
+
+    FILING ||--o{ FILING : "amends"
+```
+
+
+<br>
+<br>
+
+
+## 7. 프로젝트 구조
 
 백엔드 애플리케이션과 테스트를 분리하고, 데이터베이스 마이그레이션 및 Docker 기반 개발 환경을 포함합니다.
 
@@ -266,7 +391,7 @@ AlphaDelta/
 <br>
 
 
-## 6. 기술 스택
+## 8. 기술 스택
 
 | **영역** | **기술 스택** | **상세 라이브러리 및 도구** |
 |---|---|---|
@@ -293,7 +418,7 @@ AlphaDelta/
 <br>
 
 
-## 7. 테스트
+## 9. 테스트
 
 데이터 처리 파이프라인의 정확성과 외부 의존성 격리를 위해
 **계층형 테스트 구조**와 **VCR 기반 결정론적 테스트 환경**을 구축했습니다.
@@ -321,7 +446,7 @@ tests/
 └── conftest.py                # 전역 DB 세션 및 공통 픽스처
 ```
 
-### 7.1 VCR Cassette 기반의 결정론적 테스트 (`cassettes/`)
+### 9.1 VCR Cassette 기반의 결정론적 테스트 (`cassettes/`)
 
 `pytest-recording`을 활용해 실제 SEC EDGAR API 호출 결과를 카세트 파일로 기록합니다.
 한 번 기록된 카세트는 이후 테스트에서 네트워크 호출 없이 재생되므로,
@@ -331,7 +456,7 @@ SEC의 Rate Limit(초당 10회)이나 외부 네트워크 상태에 관계없이
 카세트 파일은 실제 API 응답을 그대로 담고 있어 목(Mock) 데이터를 별도로 작성할 필요가 없고,
 SEC EDGAR의 응답 포맷이 변경될 경우 카세트를 재녹화하는 것만으로 테스트를 최신 상태로 유지할 수 있습니다.
 
-### 7.2 도메인 단위 테스트 및 모듈별 픽스처 분리 (`modules/`)
+### 9.2 도메인 단위 테스트 및 모듈별 픽스처 분리 (`modules/`)
 
 `company_sync`, `financial_extractor`, `past_filings` 각 서브패키지에 독립된 `conftest.py`를 배치하여
 테스트 간 결합도를 낮추고 픽스처 범위를 명확히 제한했습니다.
@@ -339,7 +464,7 @@ SEC EDGAR의 응답 포맷이 변경될 경우 카세트를 재녹화하는 것�
 관심사별로 테스트 파일을 1:1 매핑하여, 실패 시 결함 지점을 빠르게 식별할 수 있도록 설계했습니다.
 
 
-### 7.3 엔드투엔드 데이터 흐름 검증 (`integration/`)
+### 9.3 엔드투엔드 데이터 흐름 검증 (`integration/`)
 
 단위 테스트가 각 컴포넌트의 정확성을 보장한다면,
 통합 테스트는 컴포넌트들이 연결되었을 때 전체 파이프라인이 올바르게 동작하는지를 검증합니다.
@@ -352,7 +477,7 @@ SEC EDGAR의 응답 포맷이 변경될 경우 카세트를 재녹화하는 것�
 <br>
 
 
-## 8. 구현 현황
+## 10. 구현 현황
 
 AlphaDelta는 계획했던 전체 서비스 범위를 모두 구현한 프로젝트가 아닙니다.
 
@@ -383,9 +508,9 @@ AlphaDelta는 계획했던 전체 서비스 범위를 모두 구현한 프로젝
 <br>
 
 
-## 9. 프로젝트를 중단한 이유
+## 11. 프로젝트를 중단한 이유
 
-### 9.1 MVP 범위 문제
+### 11.1 MVP 범위 문제
 
 AlphaDelta는 처음부터 실제 상용 서비스를 목표로 설계했습니다.
 PRD에는 공시 수집, 비교 분석, LLM 분석, DCF, 캐싱, 회원 등급, 결제, 웹훅, 운영 안정화까지
@@ -424,7 +549,7 @@ SEC 공시는 기업마다 구조와 데이터 표현이 달라 신뢰할 수 �
 더 합리적이라고 판단했습니다.**
 
 
-### 9.2 재무 데이터의 구조적 복잡성
+### 11.2 재무 데이터의 구조적 복잡성
 
 당초 계획은 20개 분기의 매출, OCF, CapEx, 순차입금을 QTD 기준으로 수집하고,
 부트스트랩으로 미래 변화율 구간을 추정하여 FCFE 기반 DCF의 입력값으로 활용하는 것이었습니다.
@@ -464,7 +589,7 @@ QTD 추출 로직이 단순한 데이터 변환 작업이라고 생각했지만,
 
 
 
-### 9.3 관심사의 변화
+### 11.3 관심사의 변화
 
 AlphaDelta를 시작한 당초 목적은 백엔드 개발 역량을 쌓는 것이었습니다.
 그러나 개발을 진행할수록 API 설계보다 **대용량 재무 데이터 처리와 정합성 문제**에
@@ -484,9 +609,9 @@ AlphaDelta는 많은 사용자를 대상으로 하는 B2C 서비스를 목표로
 <br>
 
 
-## 10. 프로젝트를 통해 얻은 경험
+## 12. 프로젝트를 통해 얻은 경험
 
-### 10.1 데이터 중심 애플리케이션 설계
+### 12.1 데이터 중심 애플리케이션 설계
 
 단순 CRUD 서비스와 달리, 외부 데이터의 구조와 품질이 전체 애플리케이션의 정확성에
 직접적인 영향을 준다는 점을 경험했습니다.
@@ -495,7 +620,7 @@ SEC 공시는 기업마다 XBRL 태그와 레이블이 달라 "데이터를 가�
 실제로는 파싱 전략, 예외 처리, 정합성 검증까지 포함하는 복잡한 문제임을 알게 되었습니다.
 데이터 파이프라인 설계가 비즈니스 로직 설계만큼 중요하다는 것을 직접 체감했습니다.
 
-### 10.2 데이터 신뢰성과 검증
+### 12.2 데이터 신뢰성과 검증
 
 재무 데이터는 숫자 하나가 틀려도 분석 결과 전체가 왜곡될 수 있습니다.
 QTD 역산 로직을 구현하면서 회계 기간 혼재, Restatement, 계절성 등
@@ -505,7 +630,7 @@ QTD 역산 로직을 구현하면서 회계 기간 혼재, Restatement, 계절�
 그리고 신뢰할 수 있는 데이터를 만들기 위한 검증 로직이
 비즈니스 로직만큼의 설계 비용을 요구한다는 것을 배웠습니다.
 
-### 10.3 모듈 단위 설계와 SRP
+### 12.3 모듈 단위 설계와 SRP
 
 `company_sync`, `financial_extractor`, `past_filings`처럼
 책임을 명확히 분리된 모듈 단위로 나누면서 단일 책임 원칙(SRP)을 실제 코드에 적용했습니다.
@@ -517,7 +642,7 @@ QTD 역산 로직을 구현하면서 회계 기간 혼재, Restatement, 계절�
 반대로 초기에 책임이 혼재된 코드를 작성했을 때
 리팩토링 비용이 예상보다 훨씬 크다는 점도 직접 겪었습니다.
 
-### 10.4 테스트 전략
+### 12.4 테스트 전략
 
 외부 데이터에 의존하는 로직일수록 정상 케이스뿐 아니라
 데이터가 누락되거나 예상과 다른 형태로 들어오는 경우까지 테스트해야 한다는 점을 배웠습니다.
@@ -531,7 +656,7 @@ QTD 역산 로직을 구현하면서 회계 기간 혼재, Restatement, 계절�
 실제 SEC API 응답을 기록하고 재생하는 방법을 도입하면서,
 외부 의존성을 완전히 격리하면서도 실제 데이터 기반으로 테스트하는 전략을 경험했습니다.
 
-### 10.5 설계 원칙과 디자인 패턴의 실용적 이해
+### 12.5 설계 원칙과 디자인 패턴의 실용적 이해
 
 Repository 패턴, Builder 패턴, DTO(Pydantic Schema)를 실제 코드에 적용하면서
 디자인 패턴이 코드의 복잡성을 낮추는 데 어떻게 기여하는지를 경험했습니다.
@@ -543,14 +668,14 @@ API 계층과 서비스 계층 사이의 데이터 변환 오류를 초기에 �
 
 패턴 자체보다 **언제, 왜 적용하는지를 이해하는 것**이 더 중요하다는 것을 배웠습니다.
 
-### 10.6 외부 라이브러리와 공식 문서의 중요성
+### 12.6 외부 라이브러리와 공식 문서의 중요성
 
 `edgartools`를 사용하면서 공식 문서와 소스 코드를 직접 읽어야 하는 상황을 자주 마주쳤습니다.
 블로그나 예제 코드만으로는 라이브러리의 내부 동작 방식이나 엣지 케이스를 파악하기 어렵고,
 특히 외부 API나 데이터 소스와 연동하는 라이브러리일수록 공식 문서를 먼저 확인하는 습관이
 디버깅 시간을 크게 줄여준다는 것을 경험했습니다.
 
-### 10.7 실서비스 관점의 개발
+### 12.7 실서비스 관점의 개발
 
 기능 구현을 넘어 실제 서비스를 가정하면 고려해야 할 요소가 훨씬 많다는 것을 경험했습니다.
 
