@@ -1,6 +1,9 @@
+<<<<<<< HEAD
 import sys
 from loguru import logger
 from pydantic import Field
+=======
+>>>>>>> develop
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -9,10 +12,15 @@ class Settings(BaseSettings):
     #API_V1_STR: str = "/api"
 
     # 데이터베이스 URL (Pydantic이 주입받을 때 엄격하게 문자열 검증)
+<<<<<<< HEAD
     #DATABASE_URL: str
     
     # 필수 외부 API Keys (TRD 및 요구사항 기반)
     FMP_API_KEY: str
+=======
+    DATABASE_URL: str = "postgresql://postgres:postgres_dev123@db:5432/disclosure_dev_db"
+
+>>>>>>> develop
     #GOOGLE_AI_API_KEY: str  # 6~7단계 Google AI Studio 연동용
 
     # 외부 환경 변수(.env 파일 및 컨테이너 environment) 자동 매핑 설정
@@ -22,6 +30,7 @@ class Settings(BaseSettings):
         extra="ignore"  # 컨테이너 내부에 시스템 환경변수가 더 많아도 에러 내지 말고 필요한 것만 파싱
     )
 
+<<<<<<< HEAD
 # 전역에서 이 인스턴스를 import하여 싱글톤처럼 재사용합니다.
 settings = Settings()
 
@@ -38,3 +47,9 @@ def setup_global_mdc_logging():
     logger.add(sys.stdout, format=log_format, level="INFO")
     
 setup_global_mdc_logging()
+=======
+
+
+# 전역에서 이 인스턴스를 import하여 싱글톤처럼 재사용합니다.
+settings = Settings()
+>>>>>>> develop

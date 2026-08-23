@@ -9,9 +9,11 @@
     "vscode": {
       "extensions": [
         "ms-python.python",
-        "ms-python.vscode-pylance"
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter"
       ]
     }
   },
+  "postCreateCommand": "echo 'source /usr/share/bash-completion/completions/git' >> ~/.bashrc",
   "remoteUser": "root"
 }
