@@ -15,7 +15,6 @@ edgartools>=4.0.0
 pandas==2.2.0
 numpy==1.26.0
 scipy==1.12.0
-yfinance==0.2.54
 
 # Authentication & Utilities
 python-dotenv==1.0.1
@@ -25,4 +24,10 @@ pydantic-settings==2.5.0
 
 # Testing & Logging
 pytest==8.2.2
+<<<<<<< HEAD
 loguru==0.7.2
+=======
+loguru==0.7.2
+pytest-mock>=3.10
+pytest-recording>=0.12.0
+>>>>>>> develop

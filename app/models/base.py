@@ -1,61 +1,15 @@
 from datetime import datetime, timezone
-from enum import Enum
+from .enum import *
+from typing import Optional
 from sqlalchemy import (
-    Column, Integer, String, Float, BigInteger, Boolean, 
+    Column, Integer, String, Float, BigInteger, Numeric, Boolean,
     DateTime, ForeignKey, Enum as SQLEnum, UniqueConstraint, Index
 )
-from sqlalchemy.orm import declarative_base, relationship, declared_attr
+from sqlalchemy.orm import Mapped, declarative_base, relationship, declared_attr, deferred
 from sqlalchemy.dialects.postgresql import JSONB
 
 Base = declarative_base()
 
-# ==========================================
-# 1. Python 내장 Enum 정의 (Pydantic 호환용 str 상속)
-# ==========================================
-
-class Language(str, Enum):
-    KOR = "KOR"
-    ENG = "ENG"
-
-class AnalysisStatus(str, Enum):
-    NOT_ANALYZED = "NOT_ANALYZED"
-    ANALYZING = "ANALYZING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
-
-class Tier(str, Enum):
-    FREE = "FREE"
-    PAID = "PAID"
-
-class Role(str, Enum):
-    ROLE_USER = "ROLE_USER"
-    ROLE_ADMIN = "ROLE_ADMIN"
-
-class Quarter(str, Enum):
-    Q1 = "1Q"
-    Q2 = "2Q"
-    Q3 = "3Q"
-    Q4 = "4Q"
-
-class FormType(str, Enum):
-    REGULAR_10_K = "REGULAR_10_K"
-    REGULAR_10_Q = "REGULAR_10_Q"
-    AMENDMENT_10_K_A = "AMENDMENT_10_K_A"
-    AMENDMENT_10_Q_A = "AMENDMENT_10_Q_A"
-
-class FilingItem(str, Enum):
-    ITEM_1A = "ITEM_1A"  # Risk Factors
-    ITEM_7 = "ITEM_7"    # MD&A
-    ITEM_8 = "ITEM_8"    # Financial Statements
-
-class DcfMetric(str, Enum):
-    FCFE_GROWTH_RATE = "FCFE_GROWTH_RATE"
-    CAPEX_TO_REVENUE = "CAPEX_TO_REVENUE"
-    NET_BORROWING_RATE = "NET_BORROWING_RATE"
-
-class AuthProvider(str, Enum):
-    GOOGLE = "GOOGLE"
-    NAVER = "NAVER"
 
 
 # ==========================================
@@ -88,9 +42,10 @@ class Company(Base, TimestampMixin):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     ticker = Column(String(10), nullable=False, unique=True, index=True)
-    cik = Column(String(10), nullable=False, unique=True)
+    cik = Column(String(10), nullable=False, unique=True, index=True)
     sector = Column(String(100), nullable=True)
     industry = Column(String(100), nullable=True)
+    fiscal_year_end = Column(SQLEnum(Quarter), nullable=False) #회계종료 분기 추가
 
     # 관계 설정 (Company ↔ Filing 양방향 1:N)
     filings = relationship("Filing", back_populates="company", cascade="all, delete-orphan")
@@ -111,8 +66,8 @@ class Filing(Base, TimestampMixin):
     analysis_status = Column(SQLEnum(AnalysisStatus), default=AnalysisStatus.NOT_ANALYZED, nullable=False)
 
     # 외래키 (Company 및 자기 참조 정정공시 체인)
-    company_id = Column(Integer, ForeignKey("companies.id", on_delete="CASCADE"), nullable=False)
-    amends_filing_id = Column(Integer, ForeignKey("filings.id", on_delete="SET NULL"), nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    amends_filing_id = Column(Integer, ForeignKey("filings.id", ondelete="SET NULL"), nullable=True)
 
     # 양방향 관계 정의
     company = relationship("Company", back_populates="filings")
@@ -136,25 +91,26 @@ class PeriodicFilingAnalysis(Base, TimestampMixin):
     language = Column(SQLEnum(Language), nullable=False)
 
     # 외래키 및 양방향 관계 설정 (Filing ↔ PeriodicFilingAnalysis)
-    filing_id = Column(Integer, ForeignKey("filings.id", on_delete="CASCADE"), nullable=False)
+    filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False)
     filing = relationship("Filing", back_populates="periodic_filing_analyses")
 
 
 class Finance(Base, TimestampMixin):
     __tablename__ = "finances"
 
-    id = Column(Integer, primary_key=True, index=True)
-    ocf = Column(BigInteger, nullable=False)       
-    capex = Column(BigInteger, nullable=False)     
-    net_borrowing = Column(BigInteger, nullable=False)
-    beta = Column(Float, nullable=True) #yfinace에서 beta return이 null일 가능성 있음  
-    stock_price = Column(Float, nullable=False)    
-    diluted_shares_outstanding = Column(BigInteger, nullable=False)
-    basic_shares_outstanding = Column(BigInteger, nullable=False)
-    raw_finances = Column(JSONB, nullable=True)    
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    revenue: Mapped[int] = Column(BigInteger, nullable=False)
+    ocf: Mapped[int] = Column(BigInteger, nullable=False)       
+    capex: Mapped[int] = Column(BigInteger, nullable=False)     
+    net_borrowing: Mapped[int] = Column(BigInteger, nullable=False)
+    beta: Mapped[Optional[float]] = Column(Float, nullable=True)
+    stock_price: Mapped[Optional[float]] = Column(Numeric(precision=18, scale=2), nullable=True)    
+    diluted_shares_outstanding: Mapped[Optional[int]] = Column(BigInteger, nullable=True)
+    basic_shares_outstanding: Mapped[Optional[int]] = Column(BigInteger, nullable=True)
+    raw_finances: Mapped[dict] = deferred(Column(JSONB, nullable=False))   
 
     # 외래키 및 양방향 1:1 제약 설정
-    filing_id = Column(Integer, ForeignKey("filings.id", on_delete="CASCADE"), nullable=False, unique=True)
+    filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False, unique=True)
     filing = relationship("Filing", back_populates="finance")
 
 
@@ -171,7 +127,7 @@ class Dcf(Base, TimestampMixin):
     confidence_level = Column(Float, default=0.95, nullable=False)
 
     # 외래키 및 관계 설정
-    filing_id = Column(Integer, ForeignKey("filings.id", on_delete="CASCADE"), nullable=False)
+    filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False)
     filing = relationship("Filing", back_populates="dcfs")
 
     # 복합 유니크 제약조건 (한 공시당 지표별 통계 데이터 단 하나만 적재 보장)
@@ -225,8 +181,8 @@ class FilingViewHistory(Base):
     view_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     # 외래키 설정
-    user_id = Column(Integer, ForeignKey("users.id", on_delete="CASCADE"), nullable=False)
-    filing_id = Column(Integer, ForeignKey("filings.id", on_delete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    filing_id = Column(Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False)
 
     # 방향성 반영: Filing 측면만 양방향 바인딩 지원
     filing = relationship("Filing", back_populates="filing_view_histories")
@@ -244,8 +200,8 @@ class UserWatchlistSlot(Base, TimestampMixin):
     is_alarm_enable = Column(Boolean, default=True, nullable=False)
 
     # 외래키 설정
-    user_id = Column(Integer, ForeignKey("users.id", on_delete="CASCADE"), nullable=False)
-    company_id = Column(Integer, ForeignKey("companies.id", on_delete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
 
     # 관계 설정 (Company ↔ UserWatchlistSlot 양방향 1:N 바인딩)
     company = relationship("Company", back_populates="user_watchlist_slots")
@@ -265,8 +221,8 @@ class UserValuationScenario(Base, TimestampMixin):
     parameters = Column(JSONB, nullable=False)
 
     # 단방향 외래키 배치 (User -> Scenario 1:N / Company -> Scenario 1:N)
-    user_id = Column(Integer, ForeignKey("users.id", on_delete="CASCADE"), nullable=False)
-    company_id = Column(Integer, ForeignKey("companies.id", on_delete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
 
 
     __table_args__ = (
