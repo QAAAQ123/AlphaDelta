@@ -406,12 +406,29 @@ AlphaDelta/
 | **Logging** | Loguru | 구조화된 콘솔·파일 로깅 |
 | **DevOps & Environment** | Docker, Docker Compose, VS Code Dev Containers | `python:3.11-slim` 기반 경량 컨테이너화 |
 
-고성능 비동기 처리를 위해 Python 3.11+, FastAPI, PostgreSQL을 기반으로 설계했습니다.
 
-- **SEC EDGAR 데이터 파이프라인**: `edgartools`로 10-K·10-Q 공시를 자동 수집하고,
-  `financial_extractor`를 통해 손익계산서·현금흐름표의 핵심 지표를 표준화된 포맷으로 가공·적재합니다.
-- **테스트 안정성**: `pytest-recording`과 VCR 카세트를 도입하여 SEC 네트워크 호출을 모킹하고,
-  외부 의존성 없는 일관된 통합 테스트 환경을 구축했습니다.
+### 기술 선택 배경
+
+- **Python**: Java/Spring 계열은 대규모 트래픽과 안정성이 요구되는 서비스에 강점이 있지만,
+  본 프로젝트는 1인 개발 체제에서 개발 속도와 정확한 데이터 처리 로직 구현이 우선순위였기 때문에
+  데이터 처리 생태계가 풍부한 Python을 선택했습니다.
+- **FastAPI, Uvicorn**: 재무 데이터는 사용자 요청 시점이 아닌 정해진 주기(스케줄링)에 맞춰 수집해야 하며,
+  여러 기업이 동시에 실적을 발표하거나 공시를 게시하는 시점에는 다건의 외부 호출을 효율적으로 처리할
+  비동기 성능이 중요합니다. 다른 Python 프레임워크 대비 FastAPI와 ASGI 서버인 Uvicorn의 비동기 처리
+  성능이 우수하다고 판단해 채택했습니다.
+- **PostgreSQL**: 초기 기획 이후 확장 단계에서 사용자가 재무 정보를 자연어로 질의할 수 있는 AI 에이전트
+  도입을 계획하고 있습니다. 에이전트가 재무 지표와 diff 데이터를 빠르게 검색·활용하려면 벡터 임베딩 기반의
+  RAG 구조가 필요한데, PostgreSQL이 벡터 확장(pgvector)을 통해 벡터 DB 기능을 잘 지원하면서도 운영·학습
+  난이도가 낮아 선택했습니다.
+- **edgartools (vs. yfinance)**: yfinance는 제공 정보의 폭이 넓고 재무 데이터 정리도 잘 되어 있지만
+  상업적 용도로 사용이 제한되어 있어, 상업적 이용이 가능한 `edgartools`를 데이터 소스로 채택했습니다.
+- **HTTPX (vs. requests)**: Python/FastAPI 환경에서 비동기 처리를 온전히 활용하려면 HTTP 클라이언트
+  또한 비동기를 네이티브로 지원해야 하므로, 동기 방식인 `requests` 대신 `HTTPX`를 선택했습니다.
+- **pytest-recording**: `Filing`, `Company` 엔티티가 담고 있는 데이터의 양이 방대해, 테스트를 실행할
+  때마다 실제 SEC API를 호출하면 소요 시간이 크게 늘어납니다. 이를 VCR 카세트로 캐싱·재생함으로써
+  테스트 속도와 안정성을 동시에 확보했습니다.
+- **Dev Containers**: 개발 환경이 로컬마다 달라지는 것을 방지하고, 어떤 환경에서도 동일한 조건으로
+  작업할 수 있도록 컨테이너 기반 개발 환경을 구성했습니다.
 
 
 <br>
